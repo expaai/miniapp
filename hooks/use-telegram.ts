@@ -103,6 +103,9 @@ export const useTelegram = () => {
       tg.ready()
       tg.expand()
       
+      // Скрываем MainButton сразу при инициализации
+      tg.MainButton.hide()
+      
       // Настройка темы
       tg.setHeaderColor('#1e293b')
       tg.setBackgroundColor('#f8fafc')
