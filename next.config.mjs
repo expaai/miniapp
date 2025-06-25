@@ -13,7 +13,7 @@ const nextConfig = {
   output: 'export',
   trailingSlash: true,
   distDir: 'dist',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/career-miniapp' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? '/miniapp' : '',
   experimental: {
     esmExternals: false,
   },
