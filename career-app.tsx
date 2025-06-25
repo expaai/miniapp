@@ -61,24 +61,20 @@ export default function CareerMiniApp() {
   useEffect(() => {
     if (!isReady) return
 
+    // Всегда скрываем MainButton, так как используем собственные кнопки в интерфейсе
+    hideMainButton()
+
     if (currentScreen === "goals") {
-      if (selectedGoals.length > 0) {
-        showMainButton("Продолжить", handleContinue)
-      } else {
-        hideMainButton()
-      }
       showBackButton(() => {
         hapticFeedback.impact('light')
         setCurrentScreen("role")
       })
     } else if (currentScreen === "main") {
-      hideMainButton()
       showBackButton(() => {
         hapticFeedback.impact('light')
         setCurrentScreen("goals")
       })
     } else {
-      hideMainButton()
       hideBackButton()
     }
 
@@ -86,7 +82,7 @@ export default function CareerMiniApp() {
       hideMainButton()
       hideBackButton()
     }
-  }, [currentScreen, selectedGoals.length, isReady])
+  }, [currentScreen, isReady])
 
   const currentGoals = selectedRole === "student" ? studentGoals : professionalGoals
 
