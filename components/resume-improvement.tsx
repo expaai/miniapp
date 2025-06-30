@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useAPI, JobMatchingRequest } from "@/hooks/use-api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,23 +22,193 @@ import {
   Target,
   Users,
   Award,
+  ChevronDown,
+  Briefcase,
 } from "lucide-react"
 
 interface ResumeImprovementProps {
   onBack: () => void
+  selectedRole?: 'student' | 'professional' | null
+  selectedGoal?: string
+  selectedProfession?: string
+  sessionId?: string
 }
 
 type Step = "instruction" | "upload" | "processing" | "results"
 
+// Основной список профессий для кнопок (10 штук)
 const professions = [
-  "Frontend разработчик",
-  "Backend разработчик",
+  "AI/ML инженер",
+  "DevOps инженер",
   "Product Manager",
+  "Специалист по кибербезопасности",
+  "Backend-разработчик",
+  "Frontend-разработчик",
+  "Product Marketing",
+  "Data Science",
+  "Системный аналитик",
+  "QA инженер",
+]
+
+// Полный справочник профессий для автокомплита
+const allProfessions = [
+  // Основные IT профессии
+  "AI/ML инженер",
+  "DevOps инженер",
+  "Product Manager",
+  "Специалист по кибербезопасности",
+  "Backend-разработчик",
+  "Frontend-разработчик",
+  "Product Marketing",
+  "Data Science",
+  "Системный аналитик",
+  "QA инженер",
+  "Fullstack-разработчик",
+  "Mobile-разработчик",
+  "iOS-разработчик",
+  "Android-разработчик",
+  "React Native разработчик",
+  "Flutter разработчик",
+  "Game Developer",
+  "Unity разработчик",
+  "Unreal Engine разработчик",
+  "Blockchain разработчик",
+  "Smart Contract разработчик",
+  "Web3 разработчик",
+  "Системный администратор",
+  "Сетевой администратор",
+  "Database Administrator (DBA)",
+  "Cloud Engineer",
+  "AWS Engineer",
+  "Azure Engineer",
+  "Google Cloud Engineer",
+  "Site Reliability Engineer (SRE)",
+  "Platform Engineer",
+  "Infrastructure Engineer",
+  "Security Engineer",
+  "Penetration Tester",
+  "Information Security Analyst",
+  "CISO (Chief Information Security Officer)",
+  "Data Engineer",
+  "Data Analyst",
+  "Business Intelligence Analyst",
+  "Machine Learning Engineer",
+  "Deep Learning Engineer",
+  "Computer Vision Engineer",
+  "NLP Engineer",
+  "Research Scientist",
   "UX/UI Designer",
-  "Data Scientist",
-  "DevOps Engineer",
-  "Marketing Manager",
-  "Sales Manager",
+  "UX Designer",
+  "UI Designer",
+  "Product Designer",
+  "Interaction Designer",
+  "Service Designer",
+  "Design System Designer",
+  "Technical Writer",
+  "Documentation Specialist",
+  "Business Analyst",
+  "Technical Analyst",
+  "Requirements Analyst",
+  "Scrum Master",
+  "Agile Coach",
+  "Project Manager",
+  "Technical Project Manager",
+  "Program Manager",
+  "Release Manager",
+  "Product Owner",
+  "Product Marketing Manager",
+  "Growth Product Manager",
+  "Technical Product Manager",
+  "API Product Manager",
+  "Platform Product Manager",
+  "Sales Engineer",
+  "Solutions Engineer",
+  "Customer Success Engineer",
+  "Technical Support Engineer",
+  "Implementation Engineer",
+  "Integration Engineer",
+  "Test Engineer",
+  "Automation QA Engineer",
+  "Manual QA Engineer",
+  "Performance Test Engineer",
+  "Security Test Engineer",
+  "QA Lead",
+  "Test Manager",
+  "Software Architect",
+  "Solution Architect",
+  "Enterprise Architect",
+  "Cloud Architect",
+  "Security Architect",
+  "Data Architect",
+  "API Architect",
+  "Microservices Architect",
+  // C-level и руководящие позиции
+  "CTO (Chief Technology Officer)",
+  "CPO (Chief Product Officer)",
+  "CDO (Chief Data Officer)",
+  "CIO (Chief Information Officer)",
+  "CISO (Chief Information Security Officer)",
+  "Chief Digital Officer",
+  "Chief Innovation Officer",
+  "Chief AI Officer",
+  "Технический директор",
+  "Директор по продукту",
+  "Директор по разработке",
+  "Директор по информационным технологиям",
+  "Директор по цифровой трансформации",
+  "Директор по инновациям",
+  "Директор по данным",
+  "Директор по информационной безопасности",
+  "Руководитель отдела разработки",
+  "Руководитель IT-отдела",
+  "Руководитель отдела продукта",
+  "Руководитель отдела аналитики",
+  "Руководитель отдела тестирования",
+  "Руководитель отдела DevOps",
+  "Руководитель отдела безопасности",
+  "Head of Engineering",
+  "Head of Product",
+  "Head of Data",
+  "Head of Security",
+  "Head of DevOps",
+  "Head of QA",
+  "Head of Design",
+  "Head of Analytics",
+  "VP of Engineering",
+  "VP of Product",
+  "VP of Technology",
+  "VP of Data",
+  "Engineering Manager",
+  "Product Manager",
+  "Data Science Manager",
+  "Security Manager",
+  "QA Manager",
+  "DevOps Manager",
+  "Platform Manager",
+  "Technical Lead",
+  "Team Lead",
+  "Squad Lead",
+  "Chapter Lead",
+  "Tribe Lead",
+  "Principal Engineer",
+  "Staff Engineer",
+  "Distinguished Engineer",
+  "Fellow Engineer",
+  "Архитектор решений",
+  "Ведущий разработчик",
+  "Старший разработчик",
+  "Ментор разработчиков",
+  // Специализированные роли
+  "Consultant",
+  "Technical Consultant",
+  "IT Consultant",
+  "Digital Consultant",
+  "Transformation Consultant",
+  "Freelancer",
+  "Independent Contractor",
+  "Entrepreneur",
+  "Startup Founder",
+  "Tech Entrepreneur",
 ]
 
 const interestingFacts = [
@@ -61,57 +232,554 @@ const interestingFacts = [
     text: "Использование ключевых слов из описания вакансии увеличивает шансы прохождения ATS на 60%.",
     icon: "🎯",
   },
+  {
+    title: "Факт о карьере",
+    text: "IT-специалисты меняют работу в среднем каждые 2-3 года, что считается нормой в индустрии.",
+    icon: "💼",
+  },
+  {
+    title: "Зарплатная статистика",
+    text: "Разработчики с опытом работы с облачными технологиями зарабатывают на 30% больше.",
+    icon: "☁️",
+  },
+  {
+    title: "Тренд рынка",
+    text: "Спрос на DevOps-инженеров вырос на 75% за последние 2 года.",
+    icon: "📈",
+  },
+  {
+    title: "Интересно знать",
+    text: "Резюме на английском языке получают на 50% больше откликов в международных компаниях.",
+    icon: "🌍",
+  },
+  {
+    title: "Факт о навыках",
+    text: "Soft skills упоминаются в 92% вакансий для руководящих позиций в IT.",
+    icon: "🤝",
+  },
+  {
+    title: "Статистика собеседований",
+    text: "Кандидаты с GitHub-портфолио проходят техническое собеседование в 3 раза чаще.",
+    icon: "💻",
+  },
+  {
+    title: "Карьерный совет",
+    text: "Участие в open-source проектах повышает шансы на трудоустройство на 40%.",
+    icon: "🔓",
+  },
+  {
+    title: "Тренд образования",
+    text: "65% IT-специалистов продолжают обучение и получают сертификации ежегодно.",
+    icon: "🎓",
+  },
+  {
+    title: "Факт о удаленке",
+    text: "85% IT-компаний предлагают гибридный или полностью удаленный формат работы.",
+    icon: "🏠",
+  },
+  {
+    title: "Интересная статистика",
+    text: "Женщины в IT зарабатывают в среднем на 15% меньше мужчин, но разрыв сокращается.",
+    icon: "👩‍💻",
+  },
+  {
+    title: "Факт о стартапах",
+    text: "Работа в стартапе дает опыт, эквивалентный 3-5 годам в крупной корпорации.",
+    icon: "⚙️",
+  },
+  {
+    title: "Тренд технологий",
+    text: "Знание Kubernetes увеличивает зарплату DevOps-инженера на 25-40%.",
+    icon: "📊",
+  },
+  {
+    title: "Карьерный факт",
+    text: "Product Manager'ы с техническим бэкграундом зарабатывают на 20% больше.",
+    icon: "💼",
+  },
+  {
+    title: "Статистика найма",
+    text: "Компании тратят в среднем 23 дня на поиск и найм одного IT-специалиста.",
+    icon: "📅",
+  },
+  {
+    title: "Интересный тренд",
+    text: "Спрос на специалистов по кибербезопасности растет на 35% ежегодно.",
+    icon: "🔒",
+  },
+  {
+    title: "Факт о обучении",
+    text: "Bootcamp-выпускники находят работу в среднем за 6 месяцев после окончания.",
+    icon: "⚡",
+  },
+  {
+    title: "Зарплатный факт",
+    text: "Архитекторы решений входят в топ-3 самых высокооплачиваемых IT-ролей.",
+    icon: "🏗️",
+  },
+  {
+    title: "Статистика роста",
+    text: "Data Science остается одной из самых быстрорастущих профессий (+22% в год).",
+    icon: "📈",
+  },
+  {
+    title: "Карьерный совет",
+    text: "Ментворство ускоряет карьерный рост на 50% по сравнению с самостоятельным развитием.",
+    icon: "👨‍🏫",
+  },
+  {
+    title: "Факт о навыках",
+    text: "Знание Python остается самым востребованным навыком в Data Science и ML.",
+    icon: "🐍",
+  },
+  {
+    title: "Интересная статистика",
+    text: "Agile-сертификации увеличивают шансы на получение руководящей роли на 60%.",
+    icon: "🔄",
+  },
+  {
+    title: "Тренд рынка",
+    text: "Компании готовы платить премию до 40% за опыт работы с микросервисами.",
+    icon: "🔧",
+  },
+  {
+    title: "Факт о собеседованиях",
+    text: "Технические собеседования в среднем длятся 45-90 минут в зависимости от уровня.",
+    icon: "⏰",
+  },
+  {
+    title: "Карьерная статистика",
+    text: "QA-инженеры с опытом автоматизации зарабатывают на 35% больше мануальных тестеров.",
+    icon: "🤖",
+  },
+  {
+    title: "Интересный факт",
+    text: "Код-ревью улучшает качество кода на 60% и является стандартной практикой в 95% команд.",
+    icon: "👀",
+  },
+  {
+    title: "Тренд образования",
+    text: "Онлайн-курсы по программированию прошли более 50 миллионов человек за последний год.",
+    icon: "💻",
+  },
+  {
+    title: "Факт о продуктивности",
+    text: "Разработчики тратят только 30% времени на написание кода, остальное - на планирование и отладку.",
+    icon: "⚖️",
+  },
+  {
+    title: "Статистика выгорания",
+    text: "42% IT-специалистов испытывают профессиональное выгорание, но компании активно с этим борются.",
+    icon: "🔥",
+  },
+  {
+    title: "Карьерный факт",
+    text: "Переход из разработки в менеджмент увеличивает зарплату на 40-60% в течение 2-3 лет.",
+    icon: "📈",
+  },
+  {
+    title: "Интересная тенденция",
+    text: "No-code/Low-code платформы создают новые роли, но не заменяют традиционную разработку.",
+    icon: "🎨",
+  },
+  {
+    title: "Факт о командах",
+    text: "Самые продуктивные команды состоят из 5-9 человек и используют Scrum или Kanban.",
+    icon: "👥",
+  },
+  {
+    title: "Статистика инноваций",
+    text: "ИИ и машинное обучение интегрируются в 78% новых IT-продуктов.",
+    icon: "🧠",
+  },
+  {
+    title: "Карьерный совет",
+    text: "Нетворкинг через профессиональные конференции приводит к новой работе в 35% случаев.",
+    icon: "🤝",
+  },
+  {
+    title: "Факт о технологиях",
+    text: "React остается самым популярным фронтенд-фреймворком среди разработчиков.",
+    icon: "⚛️",
+  },
+  {
+    title: "Интересная статистика",
+    text: "Компании с разнообразными командами показывают на 35% лучшие финансовые результаты.",
+    icon: "🌈",
+  },
+  {
+    title: "Тренд безопасности",
+    text: "DevSecOps становится стандартом - безопасность интегрируется в процесс разработки с самого начала.",
+    icon: "🛡️",
+  },
+  {
+    title: "Факт о росте",
+    text: "Junior разработчики достигают Middle уровня в среднем за 2-3 года активной практики.",
+    icon: "📚",
+  },
+  {
+    title: "Статистика собеседований",
+    text: "Живое кодирование на собеседовании практикуют 89% IT-компаний для технических ролей.",
+    icon: "💻",
+  },
+  {
+    title: "Карьерный факт",
+    text: "Специалисты с опытом работы в международных проектах получают на 45% больше предложений.",
+    icon: "🌍",
+  },
+  {
+    title: "Интересный тренд",
+    text: "Blockchain-разработчики входят в топ-5 самых высокооплачиваемых IT-специальностей.",
+    icon: "⛓️",
+  },
+  {
+    title: "Факт о обучении",
+    text: "Парное программирование ускоряет обучение новых разработчиков на 40%.",
+    icon: "👫",
+  },
+  {
+    title: "Статистика удержания",
+    text: "Компании с хорошей инженерной культурой удерживают сотрудников на 50% дольше.",
+    icon: "🏢",
+  },
+  {
+    title: "Карьерный совет",
+    text: "Регулярные 1-on-1 встречи с руководителем ускоряют карьерный рост на 25%.",
+    icon: "💬",
+  },
+  {
+    title: "Факт о будущем",
+    text: "К 2030 году прогнозируется нехватка 85 миллионов IT-специалистов по всему миру.",
+    icon: "🔮",
+  },
+  {
+    title: "Интересная статистика",
+    text: "Компании с техническим долгом тратят на 40% больше времени на разработку новых функций.",
+    icon: "⚠️",
+  },
+  {
+    title: "Тренд работы",
+    text: "4-дневная рабочая неделя тестируется в 15% IT-компаний с положительными результатами.",
+    icon: "📅",
+  },
 ]
 
-const mockJobs = [
-  {
-    title: "Senior Frontend Developer",
-    company: "Яндекс",
-    location: "Москва",
-    salary: "300-400к ₽",
-    match: 95,
-  },
-  {
-    title: "React Developer",
-    company: "Сбер",
-    location: "Санкт-Петербург",
-    salary: "250-350к ₽",
-    match: 88,
-  },
-  {
-    title: "Frontend Engineer",
-    company: "Тинькофф",
-    location: "Москва",
-    salary: "280-380к ₽",
-    match: 92,
-  },
-  {
-    title: "UI Developer",
-    company: "ВКонтакте",
-    location: "Санкт-Петербург",
-    salary: "250-350к ₽",
-    match: 82,
-  },
-]
+const getJobsForProfession = (profession: string, userRole?: 'student' | 'professional' | null, userGoal?: string) => {
+  // Базовая карта вакансий
+  const jobsMap: { [key: string]: any[] } = {
+    'AI/ML инженер': [
+      {
+        id: 1,
+        title: "Senior ML Engineer",
+        company: "Яндекс",
+        location: "Москва",
+        salary: "300 000 - 450 000 ₽",
+        type: "Полная занятость",
+        description: "Разработка и внедрение ML-моделей для поисковых алгоритмов"
+      },
+      {
+        id: 2,
+        title: "AI Research Scientist",
+        company: "Сбер",
+        location: "Санкт-Петербург",
+        salary: "250 000 - 400 000 ₽",
+        type: "Полная занятость",
+        description: "Исследования в области искусственного интеллекта и NLP"
+      },
+      {
+        id: 3,
+        title: "Machine Learning Engineer",
+        company: "VK",
+        location: "Москва",
+        salary: "280 000 - 380 000 ₽",
+        type: "Полная занятость",
+        description: "Создание рекомендательных систем и алгоритмов персонализации"
+      }
+    ],
+    'DevOps': [
+      {
+        id: 1,
+        title: "Senior DevOps Engineer",
+        company: "Тинькофф",
+        location: "Москва",
+        salary: "250 000 - 350 000 ₽",
+        type: "Полная занятость",
+        description: "Автоматизация CI/CD процессов и управление облачной инфраструктурой"
+      },
+      {
+        id: 2,
+        title: "Platform Engineer",
+        company: "Ozon",
+        location: "Москва",
+        salary: "220 000 - 320 000 ₽",
+        type: "Полная занятость",
+        description: "Разработка и поддержка платформенных решений на Kubernetes"
+      },
+      {
+        id: 3,
+        title: "Site Reliability Engineer",
+        company: "Авито",
+        location: "Москва",
+        salary: "200 000 - 300 000 ₽",
+        type: "Полная занятость",
+        description: "Обеспечение надежности и производительности высоконагруженных систем"
+      }
+    ],
+    'Product manager': [
+      {
+        id: 1,
+        title: "Senior Product Manager",
+        company: "Wildberries",
+        location: "Москва",
+        salary: "200 000 - 300 000 ₽",
+        type: "Полная занятость",
+        description: "Управление продуктовой линейкой мобильного приложения"
+      },
+      {
+        id: 2,
+        title: "Product Owner",
+        company: "Kaspersky",
+        location: "Москва",
+        salary: "180 000 - 280 000 ₽",
+        type: "Полная занятость",
+        description: "Развитие продуктов кибербезопасности для корпоративного сегмента"
+      },
+      {
+        id: 3,
+        title: "Lead Product Manager",
+        company: "Мегафон",
+        location: "Санкт-Петербург",
+        salary: "220 000 - 320 000 ₽",
+        type: "Полная занятость",
+        description: "Стратегическое планирование и запуск новых цифровых продуктов"
+      }
+    ],
+    'Backend-разработчик': [
+      {
+        id: 1,
+        title: "Senior Backend Developer",
+        company: "Яндекс",
+        location: "Москва",
+        salary: "250 000 - 400 000 ₽",
+        type: "Полная занятость",
+        description: "Разработка высоконагруженных сервисов на Go и Python"
+      },
+      {
+        id: 2,
+        title: "Java Developer",
+        company: "Сбер",
+        location: "Москва",
+        salary: "200 000 - 320 000 ₽",
+        type: "Полная занятость",
+        description: "Разработка банковских систем и микросервисной архитектуры"
+      },
+      {
+        id: 3,
+        title: "Python Backend Engineer",
+        company: "VK",
+        location: "Санкт-Петербург",
+        salary: "180 000 - 280 000 ₽",
+        type: "Полная занятость",
+        description: "Создание API для социальных сетей и мессенджеров"
+      }
+    ],
+    'Frontend-разработчик': [
+      {
+        id: 1,
+        title: "Senior Frontend Developer",
+        company: "Тинькофф",
+        location: "Москва",
+        salary: "200 000 - 300 000 ₽",
+        type: "Полная занятость",
+        description: "Разработка современных веб-приложений на React и TypeScript"
+      },
+      {
+        id: 2,
+        title: "React Developer",
+        company: "Ozon",
+        location: "Москва",
+        salary: "180 000 - 280 000 ₽",
+        type: "Полная занятость",
+        description: "Создание пользовательских интерфейсов для e-commerce платформы"
+      },
+      {
+        id: 3,
+        title: "Frontend Team Lead",
+        company: "Авито",
+        location: "Москва",
+        salary: "250 000 - 350 000 ₽",
+        type: "Полная занятость",
+        description: "Техническое лидерство команды и архитектурные решения"
+      }
+    ]
+  }
+  
+  // Возвращаем вакансии для конкретной профессии или общие IT вакансии
+  return jobsMap[profession] || [
+    {
+      id: 1,
+      title: "IT Специалист",
+      company: "TechCorp",
+      location: "Москва",
+      salary: "150 000 - 250 000 ₽",
+      type: "Полная занятость",
+      description: "Работа в сфере информационных технологий"
+    },
+    {
+      id: 2,
+      title: "Software Engineer",
+      company: "StartupXYZ",
+      location: "Санкт-Петербург",
+      salary: "120 000 - 200 000 ₽",
+      type: "Полная занятость",
+      description: "Разработка программного обеспечения"
+    },
+    {
+      id: 3,
+      title: "Technical Specialist",
+      company: "InnovateTech",
+      location: "Новосибирск",
+      salary: "100 000 - 180 000 ₽",
+      type: "Полная занятость",
+      description: "Техническая поддержка и развитие IT-решений"
+    }
+  ]
 
-export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
+  // Получаем базовые вакансии для профессии
+  const baseJobs = jobsMap[profession] || jobsMap['Другое'] || []
+  
+  // Фильтруем и адаптируем вакансии под роль пользователя
+  let filteredJobs = baseJobs.map(job => ({ ...job }))
+  
+  if (userRole === 'student') {
+    // Для студентов показываем junior/intern позиции
+    filteredJobs = filteredJobs.map(job => ({
+      ...job,
+      title: job.title.includes('Senior') ? job.title.replace('Senior', 'Junior') : 
+             job.title.includes('Lead') ? job.title.replace('Lead', 'Junior') :
+             job.title,
+      salary: job.salary.replace(/\d+/g, (match: string) => {
+        const num = parseInt(match)
+        return Math.floor(num * 0.6).toString() // Снижаем зарплату на 40% для junior позиций
+      }),
+      description: job.description + ' (Позиция для начинающих специалистов)'
+    }))
+  } else if (userRole === 'professional') {
+    // Для профессионалов показываем senior/lead позиции
+    filteredJobs = filteredJobs.map(job => ({
+      ...job,
+      title: job.title.includes('Junior') ? job.title.replace('Junior', 'Senior') : 
+             !job.title.includes('Senior') && !job.title.includes('Lead') ? 'Senior ' + job.title :
+             job.title,
+      salary: job.salary.replace(/\d+/g, (match: string) => {
+        const num = parseInt(match)
+        return Math.floor(num * 1.3).toString() // Увеличиваем зарплату на 30% для senior позиций
+      }),
+      description: job.description + ' (Позиция для опытных специалистов)'
+    }))
+  }
+  
+  return filteredJobs
+}
+
+export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, selectedProfession, sessionId }: ResumeImprovementProps) {
   console.log('🚀 КОМПОНЕНТ RESUMEIMPROVEMENT ЗАГРУЖЕН!')
+  console.log('🎯 Получены props:', { selectedRole, selectedGoal, selectedProfession, sessionId })
   const [currentStep, setCurrentStep] = useState<Step>("instruction")
-  const [selectedProfession, setSelectedProfession] = useState("")
-  const [customProfession, setCustomProfession] = useState("")
+
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [currentFactIndex, setCurrentFactIndex] = useState(0)
   const [jobUrl, setJobUrl] = useState("")
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null)
+  const [apiJobs, setApiJobs] = useState<any[]>([])
+  
+  // Состояния для выбора профессии
+  const [localSelectedProfession, setLocalSelectedProfession] = useState(selectedProfession || "")
+  const [customProfession, setCustomProfession] = useState("")
+  const [showCustomInput, setShowCustomInput] = useState(false)
+  const [filteredProfessions, setFilteredProfessions] = useState<string[]>([])
+  
+  const { getJobMatches, logProfessionSelection, loading: apiLoading } = useAPI()
+  
+  // Обработчики для выбора профессии
+  const handleProfessionSelect = async (profession: string) => {
+    setLocalSelectedProfession(profession)
+    setShowCustomInput(false)
+    setCustomProfession("")
+    
+    // Логируем выбор профессии
+    if (sessionId) {
+      try {
+        await logProfessionSelection({
+          user_id: `user_${Date.now()}`,
+          session_id: sessionId,
+          profession: profession,
+          user_role: selectedRole || 'professional',
+          user_goal: selectedGoal || '',
+          timestamp: new Date().toISOString()
+        })
+      } catch (error) {
+        console.error('Failed to log profession selection:', error)
+      }
+    }
+  }
+  
+  const handleCustomProfessionChange = (value: string) => {
+    setCustomProfession(value)
+    if (value.length > 0) {
+      const filtered = allProfessions.filter(prof => 
+        prof.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 5)
+      setFilteredProfessions(filtered)
+    } else {
+      setFilteredProfessions([])
+    }
+  }
+  
+  const handleCustomProfessionSubmit = async () => {
+    if (customProfession.trim()) {
+      await handleProfessionSelect(customProfession.trim())
+    }
+  }
+  
+  // Fetch jobs from API when component mounts
+  useEffect(() => {
+    const fetchJobs = async () => {
+      const profession = localSelectedProfession || customProfession
+      if (profession && sessionId) {
+        try {
+          const jobRequest: JobMatchingRequest = {
+            user_id: `user_${Date.now()}`,
+            session_id: sessionId,
+            profession: profession,
+            user_role: selectedRole || 'professional',
+            user_goal: selectedGoal || '',
+            timestamp: new Date().toISOString()
+          }
+          const response = await getJobMatches(jobRequest)
+          setApiJobs(response.jobs || [])
+        } catch (error) {
+          console.error('Failed to fetch jobs:', error)
+          // Fallback to hardcoded jobs if API fails
+          setApiJobs(getJobsForProfession(profession, selectedRole, selectedGoal))
+        }
+      }
+    }
+    fetchJobs()
+  }, [localSelectedProfession, customProfession, sessionId, selectedRole, selectedGoal, getJobMatches])
   
   console.log('📍 Current step:', currentStep)
-  console.log('📊 Все состояния:', { currentStep, selectedProfession, customProfession, uploadedFile })
+  console.log('📊 Все состояния:', { currentStep, selectedProfession, uploadedFile, selectedRole, selectedGoal })
 
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentFactIndex((prev) => (prev + 1) % interestingFacts.length)
-    }, 3000)
+    }, 5000) // Увеличено до 5 секунд
     return () => clearInterval(interval)
   }, [])
+
+
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -145,26 +813,273 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
     }
   }
 
-  const handleNext = () => {
+  const extractTextFromFile = async (file: File): Promise<string> => {
+    console.log('🔥 Начинаем извлечение текста из файла:', file.name, 'тип:', file.type, 'размер:', file.size, 'байт')
+    
+    if (file.type === 'text/plain') {
+      console.log('🔥 Обрабатываем TXT файл')
+      const text = await file.text()
+      console.log('🔥 TXT текст извлечен, длина:', text.length, 'символов')
+      return text
+    }
+    
+    if (file.type === 'application/pdf') {
+      console.log('🔥 Начинаем обработку PDF файла')
+      try {
+        console.log('🔥 Импортируем pdfjs-dist...')
+        // Динамический импорт pdfjs-dist
+        const pdfjsLib = await import('pdfjs-dist')
+        console.log('🔥 pdfjs-dist импортирован, версия:', pdfjsLib.version)
+        
+        // Настройка worker для Next.js (используем локальный файл для избежания CORS)
+        if (typeof window !== 'undefined') {
+          const workerSrc = '/pdf.worker.min.mjs'
+          pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+          console.log('🔥 Worker настроен (локальный):', workerSrc)
+        }
+        
+        console.log('🔥 Читаем файл как ArrayBuffer...')
+        const arrayBuffer = await file.arrayBuffer()
+        console.log('🔥 ArrayBuffer получен, размер:', arrayBuffer.byteLength, 'байт')
+        
+        console.log('🔥 Загружаем PDF документ...')
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        console.log('🔥 PDF загружен, количество страниц:', pdf.numPages)
+        
+        let fullText = ''
+        
+        // Извлекаем текст из всех страниц
+        for (let i = 1; i <= pdf.numPages; i++) {
+          console.log(`🔥 Обрабатываем страницу ${i}/${pdf.numPages}...`)
+          const page = await pdf.getPage(i)
+          const textContent = await page.getTextContent()
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ')
+          fullText += pageText + '\n'
+          console.log(`🔥 Страница ${i} обработана, извлечено ${pageText.length} символов`)
+        }
+        
+        console.log('🔥 Общая длина извлеченного текста:', fullText.length, 'символов')
+        
+        if (!fullText.trim()) {
+          console.log('🔥 ОШИБКА: PDF не содержит текста')
+          throw new Error('PDF файл не содержит текста или текст не может быть извлечен.')
+        }
+        
+        console.log('🔥 PDF успешно обработан')
+        return fullText
+      } catch (error) {
+        console.error('🔥 ОШИБКА при чтении PDF:', error)
+        console.error('🔥 Тип ошибки:', error.constructor.name)
+        console.error('🔥 Сообщение ошибки:', error.message)
+        throw new Error(`Не удалось прочитать PDF файл: ${error.message}. Попробуйте сохранить резюме в текстовом формате (.txt).`)
+      }
+    }
+    
+    if (file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      // Для Word файлов предлагаем альтернативу
+      throw new Error('Пожалуйста, сохраните резюме в текстовом формате (.txt) для анализа.')
+    }
+    
+    return await file.text()
+  }
+
+  const formatAIResponse = (response: string): string => {
+    // Улучшаем форматирование ответа ИИ
+    let formatted = response
+      // Добавляем эмодзи к заголовкам
+      .replace(/Общее впечатление/g, '🎯 Общее впечатление')
+      .replace(/Сильные стороны/g, '✅ Сильные стороны')
+      .replace(/Области для улучшения/g, '🔧 Области для улучшения')
+      .replace(/Предложения по переформулировке/g, '✏️ Предложения по переформулировке')
+      .replace(/Адаптация под российский рынок/g, '🇷🇺 Адаптация под российский рынок')
+      .replace(/Рекомендации по адаптации/g, '🎯 Рекомендации по адаптации')
+      .replace(/Приоритетные изменения/g, '⚡ Приоритетные изменения')
+      .replace(/Заключение/g, '🏆 Заключение')
+      // Убираем лишние кавычки и скобки
+      .replace(/"/g, '')
+      .replace(/\[|\]/g, '')
+      // Улучшаем форматирование списков
+      .replace(/- /g, '• ')
+      .replace(/\d+\. /g, (match) => `${match.charAt(0)}. `)
+    
+    return formatted
+  }
+
+  const analyzeResumeWithAI = async (resumeText: string, profession: string, jobUrl?: string) => {
+    // Ограничиваем длину текста резюме для избежания превышения лимитов токенов
+    const maxResumeLength = 6000 // примерно 1500 токенов для резюме
+    const truncatedResumeText = resumeText.length > maxResumeLength 
+      ? resumeText.substring(0, maxResumeLength) + "\n\n[Текст резюме обрезан для анализа]"
+      : resumeText
+
+    console.log('🔥 Длина текста резюме:', resumeText.length, 'символов')
+    console.log('🔥 Обрезанная длина:', truncatedResumeText.length, 'символов')
+
+    const prompt = `Ты HR-специалист. Проанализируй резюме на позицию "${profession}"${jobUrl ? ` (вакансия: ${jobUrl})` : ''}.
+
+Оцени:
+1. Структуру и читаемость
+2. Полноту информации и достижения
+3. Формулировки (глаголы vs существительные)
+4. Карьерный путь
+5. Соответствие позиции
+6. ATS-оптимизацию
+
+Ответ структурируй:
+- Общее впечатление (2-3 предложения)
+- Сильные стороны (3-4 пункта)
+- Области улучшения (3-4 рекомендации)
+- Примеры переформулировок (1-2)
+- Адаптация под рынок РФ
+- Приоритетные изменения
+
+Резюме:
+${truncatedResumeText}`
+
+    try {
+      // Проверяем наличие API ключа
+      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
+      if (!apiKey) {
+        throw new Error('OpenAI API ключ не настроен')
+      }
+
+      // Создаем контроллер для отмены запроса по таймауту
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 секунд таймаут
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{
+            role: 'user',
+            content: prompt
+          }],
+          max_tokens: 4000,
+          temperature: 0.7
+        }),
+        signal: controller.signal
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      const rawContent = data.choices[0].message.content
+      
+      // Очищаем markdown элементы из ответа
+      const cleanContent = rawContent
+        .replace(/#{1,6}\s*/g, '') // убираем заголовки #
+        .replace(/\*\*(.*?)\*\*/g, '$1') // убираем жирный текст **
+        .replace(/\*(.*?)\*/g, '$1') // убираем курсив *
+        .replace(/`(.*?)`/g, '$1') // убираем код `
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // убираем ссылки [text](url)
+        .replace(/^\s*[-*+]\s+/gm, '• ') // заменяем markdown списки на простые
+        .replace(/^\s*\d+\.\s+/gm, '') // убираем нумерованные списки
+        .trim()
+      
+      console.log('🔥 Исходный ответ ИИ:', rawContent.substring(0, 200) + '...')
+      console.log('🔥 Очищенный ответ:', cleanContent.substring(0, 200) + '...')
+      
+      return cleanContent
+    } catch (error) {
+      console.error('Ошибка анализа резюме:', error)
+      if (error.name === 'AbortError') {
+        return 'Превышено время ожидания ответа от сервера. Попробуйте еще раз.'
+      }
+      if (error.message.includes('API ключ не настроен')) {
+        return 'Сервис анализа временно недоступен. Обратитесь к администратору.'
+      }
+      return `Произошла ошибка при анализе резюме: ${error.message}. Попробуйте еще раз.`
+    }
+  }
+
+  const handleNext = async () => {
+    console.log('🔥 КНОПКА ПРОДОЛЖИТЬ НАЖАТА! Текущий шаг:', currentStep)
+    console.log('🔥 selectedProfession:', selectedProfession)
+    console.log('🔥 canProceed():', canProceed())
+    
     if (currentStep === "instruction") {
+      console.log('🔥 ПЕРЕХОДИМ К ЗАГРУЗКЕ!')
       setCurrentStep("upload")
     } else if (currentStep === "upload") {
+      console.log('🔥 ПЕРЕХОДИМ К ОБРАБОТКЕ!')
       setCurrentStep("processing")
-      // Simulate processing
-      setTimeout(() => {
-        setCurrentStep("results")
-      }, 3000)
+      setIsAnalyzing(true)
+      
+      if (uploadedFile) {
+        try {
+          console.log('🔥 Начинаем извлечение текста из файла...')
+          const resumeText = await extractTextFromFile(uploadedFile)
+          console.log('🔥 Текст извлечен, начинаем анализ...')
+          
+          const profession = selectedProfession
+          const result = await analyzeResumeWithAI(resumeText, profession, jobUrl)
+          console.log('🔥 Анализ завершен, форматируем результат...')
+          
+          const formattedResult = formatAIResponse(result)
+          setAnalysisResult(formattedResult)
+          
+          console.log('🔥 Результат установлен, завершаем анализ...')
+          
+          // Минимальное время показа экрана обработки (3 секунды для чтения фактов)
+          setTimeout(() => {
+            setIsAnalyzing(false)
+            setCurrentStep("results")
+            console.log('🔥 Переход к результатам завершен!')
+          }, 3000)
+          
+        } catch (error) {
+          console.error('Ошибка при обработке:', error)
+          setAnalysisResult(`Ошибка при обработке резюме: ${error.message || error}`)
+          
+          // В случае ошибки тоже завершаем анализ
+          setTimeout(() => {
+            setIsAnalyzing(false)
+            setCurrentStep("results")
+          }, 2000)
+        }
+      } else {
+        console.error('Файл не загружен!')
+        setAnalysisResult('Файл резюме не был загружен.')
+        setTimeout(() => {
+          setIsAnalyzing(false)
+          setCurrentStep("results")
+        }, 2000)
+      }
     }
   }
 
   const canProceed = () => {
-    if (currentStep === "instruction") {
-      return selectedProfession !== "" || customProfession.trim() !== ""
-    }
-    if (currentStep === "upload") {
-      return uploadedFile !== null
-    }
-    return false
+    const result = (() => {
+      if (currentStep === "instruction") {
+        return (localSelectedProfession && localSelectedProfession.trim() !== "") || 
+               (customProfession && customProfession.trim() !== "")
+      }
+      if (currentStep === "upload") {
+        return uploadedFile !== null
+      }
+      return false
+    })()
+    
+    console.log('🔍 canProceed проверка:', {
+      currentStep,
+      selectedProfession: localSelectedProfession || customProfession,
+      uploadedFile: uploadedFile?.name,
+      result
+    })
+    
+    return result
   }
 
   console.log('📋 Текущий шаг:', currentStep)
@@ -173,7 +1088,7 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
     console.log('📝 РЕНДЕРИМ ЭКРАН ИНСТРУКЦИЙ')
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-purple-700 text-white p-4">
-        <div className="max-w-md mx-auto">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-8 pt-4">
             <Button
@@ -209,38 +1124,64 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Target className="h-5 w-5 text-white" />
-              <h3 className="font-semibold text-white">Выберите профессию</h3>
+              <h3 className="font-semibold text-white">Профессия</h3>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {professions.map((profession) => (
-                <Button
-                  key={profession}
-                  variant={selectedProfession === profession ? "secondary" : "outline"}
-                  className={`h-auto p-3 text-left justify-start text-sm ${
-                    selectedProfession === profession
-                      ? "bg-white text-purple-600 hover:bg-white/90 shadow-md"
-                      : "bg-white/20 text-white border-white/40 hover:bg-white/30 backdrop-blur-sm"
-                  }`}
-                  onClick={() => {
-                    setSelectedProfession(profession)
-                    setCustomProfession("")
-                  }}
-                >
-                  {profession}
-                </Button>
-              ))}
+            <div className="space-y-3">
+              {/* Simple text input */}
+              <Input
+                placeholder="Введите название профессии (например: Frontend разработчик)"
+                value={customProfession}
+                onChange={(e) => handleCustomProfessionChange(e.target.value)}
+                className="bg-white/20 border-white/40 text-white placeholder:text-white/70 backdrop-blur-sm"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCustomProfessionSubmit()
+                  }
+                }}
+              />
+              
+              {/* Filtered suggestions */}
+              {filteredProfessions.length > 0 && (
+                <div className="bg-white/20 border border-white/40 rounded-lg backdrop-blur-sm">
+                  {filteredProfessions.map((profession) => (
+                    <button
+                      key={profession}
+                      onClick={() => handleProfessionSelect(profession)}
+                      className="w-full text-left px-4 py-2 text-white hover:bg-white/20 first:rounded-t-lg last:rounded-b-lg"
+                    >
+                      {profession}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {/* Popular professions */}
+               <div className="text-white/70 text-sm">
+                 <p className="mb-2">Популярные профессии:</p>
+                 <div className="flex flex-wrap gap-2">
+                   {allProfessions.slice(0, 6).map((profession) => (
+                     <button
+                       key={profession}
+                       onClick={() => handleProfessionSelect(profession)}
+                       className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-full text-xs transition-colors"
+                     >
+                       {profession}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+               
+               {/* Selected profession display */}
+               {(localSelectedProfession || customProfession) && (
+                 <div className="bg-white/20 border border-white/40 rounded-lg p-3 backdrop-blur-sm">
+                   <div className="flex items-center gap-2">
+                     <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                     <p className="text-white font-medium">Выбрана профессия: {localSelectedProfession || customProfession}</p>
+                   </div>
+                 </div>
+               )}
             </div>
-
-            <Input
-              placeholder="Или напишите свою профессию"
-              value={customProfession}
-              onChange={(e) => {
-                setCustomProfession(e.target.value)
-                setSelectedProfession("")
-              }}
-              className="bg-white/20 border-white/40 text-white placeholder:text-white/70 backdrop-blur-sm"
-            />
           </div>
 
           {/* Job URL input */}
@@ -248,7 +1189,7 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
             <div className="flex items-center gap-2 mb-3">
               <ExternalLink className="h-5 w-5 text-white" />
               <h3 className="font-semibold text-white">Ссылка на вакансию</h3>
-              <Badge variant="secondary" className="bg-white/20 text-white text-xs">
+              <Badge variant="secondary" className="bg-white/20 text-white text-xs pointer-events-none">
                 Опционально
               </Badge>
             </div>
@@ -279,7 +1220,7 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
   if (currentStep === "upload") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-purple-700 text-white p-4">
-        <div className="max-w-md mx-auto">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-8 pt-4">
             <Button
@@ -378,12 +1319,12 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
               <div className="absolute inset-4 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-sm">
                 <FileText className="h-8 w-8 text-white" />
               </div>
-              <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center">
-                34%
+              <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold rounded-lg px-2 py-1 flex items-center justify-center">
+                в процессе
               </div>
             </div>
             <h2 className="text-xl font-semibold mb-2">Анализируем резюме</h2>
-            <p className="text-white/80">Это займет несколько секунд...</p>
+            <p className="text-white/80">Обычно это занимает до 1-2 минут...</p>
           </div>
 
           {/* Interesting facts */}
@@ -424,124 +1365,119 @@ export default function ResumeImprovement({ onBack }: ResumeImprovementProps) {
             <h1 className="text-xl font-semibold">Результаты анализа</h1>
           </div>
 
-          {/* Score */}
-          <Card className="bg-gradient-to-r from-green-500 to-emerald-600 border-0 mb-6 shadow-lg">
-            <CardContent className="p-6 text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <CheckCircle className="h-6 w-6 text-white" />
-                <span className="text-lg font-semibold text-white">Основные изменения</span>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-white/90">
-                  <CheckCircle className="h-4 w-4" />
-                  <span className="text-sm">Добавлены ключевые навыки для Frontend разработчика</span>
+          {/* Analysis Result */}
+          {analysisResult && (
+            <Card className="bg-white/20 backdrop-blur-sm border-white/30 shadow-lg mb-6 w-full max-w-full overflow-hidden">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <CheckCircle className="h-6 w-6 text-green-400" />
+                  <span className="text-xl font-semibold text-white">Анализ резюме</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/90">
-                  <CheckCircle className="h-4 w-4" />
-                  <span className="text-sm">Улучшено описание достижений с конкретными цифрами</span>
+                <div className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap break-words overflow-auto max-w-full">
+                  {analysisResult}
                 </div>
-                <div className="flex items-center gap-2 text-white/90">
-                  <CheckCircle className="h-4 w-4" />
-                  <span className="text-sm">Оптимизирована структура для ATS-систем</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Recommendations */}
+
+
+          {/* Additional Recommendations */}
           <div className="mb-6">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Lightbulb className="h-5 w-5" />
-              Рекомендации
+              <Sparkles className="h-5 w-5" />
+              Дополнительные рекомендации
             </h3>
-            <div className="space-y-3">
-              <Card className="bg-white/20 backdrop-blur-sm border-white/30 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="bg-orange-500/20 rounded-full p-2">
-                      <Lightbulb className="h-4 w-4 text-orange-400" />
+            <div className="grid grid-cols-1 gap-4">
+              {/* Online Consultation */}
+              <Card className="bg-white/10 backdrop-blur-lg border-white/20 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
                     </div>
-                    <div>
-                      <h4 className="font-medium text-white mb-1">Технические навыки</h4>
-                      <p className="text-white/80 text-sm">
-                        Добавьте опыт работы с TypeScript и Next.js - эти технологии очень востребованы
-                      </p>
-                    </div>
+                    <h4 className="font-bold text-white text-lg mb-2">Онлайн консультация</h4>
+                    <p className="text-white/90 text-sm mb-4 leading-relaxed">Персональная консультация с HR-экспертом</p>
+                    <Button className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 hover:from-blue-600 hover:to-blue-700 transition-all duration-300 font-semibold py-2.5 shadow-lg">
+                      Заказать
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white/20 backdrop-blur-sm border-white/30 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="bg-purple-500/20 rounded-full p-2">
-                      <TrendingUp className="h-4 w-4 text-purple-400" />
+              {/* Knowledge Base */}
+              <Card className="bg-white/10 backdrop-blur-lg border-white/20 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
                     </div>
-                    <div>
-                      <h4 className="font-medium text-white mb-1">Проекты</h4>
-                      <p className="text-white/80 text-sm">
-                        Опишите 2-3 ключевых проекта с указанием технологий и результатов
-                      </p>
+                    <h4 className="font-bold text-white text-lg mb-2">База знаний</h4>
+                    <p className="text-white/90 text-sm mb-4 leading-relaxed">Доступ к профессиональным материалам</p>
+                    <Button className="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 hover:from-purple-600 hover:to-purple-700 transition-all duration-300 font-semibold py-2.5 shadow-lg">
+                      Получить доступ
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* LinkedIn Profile */}
+              <Card className="bg-white/10 backdrop-blur-lg border-white/20 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
                     </div>
+                    <h4 className="font-bold text-white text-lg mb-2">LinkedIn профиль</h4>
+                    <p className="text-white/90 text-sm mb-4 leading-relaxed">Оптимизация профиля в LinkedIn</p>
+                    <Button className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white border-0 hover:from-green-600 hover:to-green-700 transition-all duration-300 font-semibold py-2.5 shadow-lg">
+                      Получить помощь
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </div>
 
-          {/* Additional tips */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              Дополнительные советы
-            </h3>
-            <Card className="bg-white/20 backdrop-blur-sm border-white/30 shadow-lg">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="bg-blue-500/20 rounded-full p-2">
-                    <Users className="h-4 w-4 text-blue-400" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-white mb-1">Создайте профиль на LinkedIn</h4>
-                    <p className="text-white/80 text-sm mb-3">
-                      Добавьте портфолио на GitHub
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Job matches */}
           <div className="mb-6">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Users className="h-5 w-5" />
+              <Briefcase className="h-5 w-5" />
               Подходящие вакансии
             </h3>
             <div className="space-y-3">
-              <Card className="bg-white/20 backdrop-blur-sm border-white/30 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h4 className="font-medium text-white">Senior Frontend Developer</h4>
-                      <p className="text-white/80 text-sm">Яндекс</p>
+              {(apiJobs.length > 0 ? apiJobs : getJobsForProfession(localSelectedProfession || customProfession, selectedRole, selectedGoal)).map((job) => (
+                <Card key={job.id} className="bg-white/20 backdrop-blur-sm border-white/30 shadow-lg hover:bg-white/25 transition-colors cursor-pointer">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-medium text-white">{job.title}</h4>
+                        <p className="text-white/80 text-sm">{job.company}</p>
+                      </div>
+                      <Badge className="bg-green-500/20 text-green-400 border-green-400/30">
+                        {job.type}
+                      </Badge>
                     </div>
-                    <Badge className="bg-green-500 text-white font-semibold">
-                      95% совпадение
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 text-white/70 text-sm">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      Москва
+                    <p className="text-white/70 text-sm mb-2">{job.description}</p>
+                    <div className="flex items-center gap-4 text-white/70 text-sm">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {job.location}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        {job.salary}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
-                      200-300к ₽
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
 

@@ -9,8 +9,10 @@ export default function TestResumePage() {
   if (showResume) {
     return (
       <ResumeImprovement 
-        onBack={() => setShowResume(false)}
-      />
+          onBack={() => setShowResume(false)}
+          selectedRole={null}
+          selectedGoal={undefined}
+        />
     )
   }
 

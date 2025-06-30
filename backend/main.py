@@ -51,6 +51,31 @@ class CareerTestResponse(BaseModel):
     recommended_careers: List[str]
     development_areas: List[str]
 
+# Новые модели для логирования
+class ProfessionSelectionRequest(BaseModel):
+    user_id: Optional[str] = None
+    selected_profession: str
+    user_role: Optional[str] = None  # 'student' | 'professional'
+    user_goal: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+class ProfessionSelectionResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: str
+
+class JobMatchingRequest(BaseModel):
+    session_id: str
+    profession: str
+    user_role: Optional[str] = None
+    user_goal: Optional[str] = None
+    job_url: Optional[str] = None
+
+class JobMatchingResponse(BaseModel):
+    jobs: List[dict]
+    total_count: int
+    session_id: str
+
 # Эндпоинты
 @app.get("/")
 async def root():
@@ -195,6 +220,138 @@ async def process_career_test(request: CareerTestRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка обработки теста: {str(e)}")
+
+@app.post("/log-profession-selection", response_model=ProfessionSelectionResponse)
+async def log_profession_selection(request: ProfessionSelectionRequest):
+    """
+    Логирование выбора профессии пользователем
+    """
+    try:
+        # Генерируем уникальный session_id
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        # Логируем данные (в будущем сохранять в БД)
+        log_data = {
+            "session_id": session_id,
+            "user_id": request.user_id,
+            "selected_profession": request.selected_profession,
+            "user_role": request.user_role,
+            "user_goal": request.user_goal,
+            "timestamp": request.timestamp or datetime.now(),
+            "action": "profession_selection"
+        }
+        
+        print(f"[PROFESSION_SELECTION] {log_data}")
+        
+        return ProfessionSelectionResponse(
+            success=True,
+            message="Выбор профессии успешно зарегистрирован",
+            session_id=session_id
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка логирования выбора профессии: {str(e)}")
+
+@app.post("/get-job-matches", response_model=JobMatchingResponse)
+async def get_job_matches(request: JobMatchingRequest):
+    """
+    Получение подходящих вакансий и логирование запроса
+    """
+    try:
+        # Логируем запрос подборки вакансий
+        log_data = {
+            "session_id": request.session_id,
+            "profession": request.profession,
+            "user_role": request.user_role,
+            "user_goal": request.user_goal,
+            "job_url": request.job_url,
+            "timestamp": datetime.now(),
+            "action": "job_matching_request"
+        }
+        
+        print(f"[JOB_MATCHING] {log_data}")
+        
+        # Мок-данные вакансий (позже заменить на реальную логику)
+        jobs_map = {
+            "AI/ML инженер": [
+                {
+                    "id": 1,
+                    "title": "Senior ML Engineer",
+                    "company": "Яндекс",
+                    "location": "Москва",
+                    "salary": "300 000 - 450 000 ₽",
+                    "type": "Полная занятость",
+                    "description": "Разработка и внедрение ML-моделей для поисковых алгоритмов"
+                },
+                {
+                    "id": 2,
+                    "title": "AI Research Scientist",
+                    "company": "Сбер",
+                    "location": "Санкт-Петербург",
+                    "salary": "250 000 - 400 000 ₽",
+                    "type": "Полная занятость",
+                    "description": "Исследования в области искусственного интеллекта и NLP"
+                }
+            ],
+            "DevOps": [
+                {
+                    "id": 1,
+                    "title": "Senior DevOps Engineer",
+                    "company": "Тинькофф",
+                    "location": "Москва",
+                    "salary": "250 000 - 350 000 ₽",
+                    "type": "Полная занятость",
+                    "description": "Автоматизация CI/CD процессов и управление облачной инфраструктурой"
+                }
+            ]
+        }
+        
+        # Получаем вакансии для профессии
+        jobs = jobs_map.get(request.profession, [
+            {
+                "id": 1,
+                "title": "IT Специалист",
+                "company": "TechCorp",
+                "location": "Москва",
+                "salary": "150 000 - 250 000 ₽",
+                "type": "Полная занятость",
+                "description": "Работа в сфере информационных технологий"
+            }
+        ])
+        
+        # Адаптируем вакансии под роль пользователя
+        if request.user_role == "student":
+            jobs = [{
+                **job,
+                "title": job["title"].replace("Senior", "Junior") if "Senior" in job["title"] else job["title"],
+                "description": job["description"] + " (Позиция для начинающих специалистов)"
+            } for job in jobs]
+        elif request.user_role == "professional":
+            jobs = [{
+                **job,
+                "title": "Senior " + job["title"] if "Senior" not in job["title"] and "Lead" not in job["title"] else job["title"],
+                "description": job["description"] + " (Позиция для опытных специалистов)"
+            } for job in jobs]
+        
+        # Логируем результат
+        result_log = {
+            "session_id": request.session_id,
+            "jobs_count": len(jobs),
+            "timestamp": datetime.now(),
+            "action": "job_matching_result"
+        }
+        
+        print(f"[JOB_MATCHING_RESULT] {result_log}")
+        
+        return JobMatchingResponse(
+            jobs=jobs,
+            total_count=len(jobs),
+            session_id=request.session_id
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения вакансий: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

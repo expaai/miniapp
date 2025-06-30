@@ -14,6 +14,8 @@ export default function TestResumePage() {
         console.log('🔙 НАЖАТА КНОПКА НАЗАД - ВОЗВРАЩАЕМСЯ НА ПРЕДЫДУЩИЙ ЭКРАН')
         router.back()
       }}
+      selectedRole={null}
+      selectedGoal={undefined}
     />
   )
 }

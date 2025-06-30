@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTelegram } from "@/hooks/use-telegram"
-import { useAPI, CareerAdviceResponse } from "@/hooks/use-api"
+import { useAPI, CareerAdviceResponse, ProfessionSelectionRequest, JobMatchingRequest } from "@/hooks/use-api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -33,9 +33,22 @@ const additionalServices = [
   { title: "Получить личную консультацию", icon: "👨‍💼", premium: true },
 ]
 
+const professions = [
+  "Frontend разработчик",
+  "Backend разработчик",
+  "Fullstack разработчик",
+  "Mobile разработчик",
+  "DevOps инженер",
+  "Data Scientist",
+  "AI/ML инженер",
+  "Product Manager",
+  "UX/UI дизайнер",
+  "QA инженер"
+]
+
 export default function CareerMiniApp() {
   const router = useRouter()
-  const [currentScreen, setCurrentScreen] = useState<"role" | "goals" | "main" | "advice" | "resume">("role")
+  const [currentScreen, setCurrentScreen] = useState<"role" | "goals" | "profession" | "main" | "advice" | "resume">("role")
   
   // Отладка изменений currentScreen
   useEffect(() => {
@@ -43,12 +56,14 @@ export default function CareerMiniApp() {
   }, [currentScreen])
   const [selectedRole, setSelectedRole] = useState<Role>(null)
   const [selectedGoal, setSelectedGoal] = useState<Goal>("")
+  const [selectedProfession, setSelectedProfession] = useState<string>("")
   const [careerAdvice, setCareerAdvice] = useState<CareerAdviceResponse | null>(null)
   
   // Логирование для отладки
   console.log('🔄 РЕНДЕР КОМПОНЕНТА! currentScreen:', currentScreen, 'selectedGoal:', selectedGoal)
   const { user, isReady, showMainButton, hideMainButton, showBackButton, hideBackButton, hapticFeedback } = useTelegram()
-  const { getCareerAdvice, loading, error, clearError } = useAPI()
+  const { getCareerAdvice, loading, error, clearError, logProfessionSelection, getJobMatches } = useAPI()
+  const [sessionId, setSessionId] = useState<string>("")
   
   // Получаем имя пользователя из Telegram или используем по умолчанию
   const userName = user?.first_name || "Пользователь"
@@ -84,10 +99,10 @@ export default function CareerMiniApp() {
     
     // Если выбрана цель улучшения резюме, переходим к экрану резюме
     console.log('🔍 Проверяем цель:', selectedGoal.toLowerCase())
-    const includesResume = selectedGoal.toLowerCase().includes('резюме')
-    console.log('🔍 Содержит "резюме"?', includesResume)
+    const isImproveResume = selectedGoal.toLowerCase().includes('хочу улучшить резюме')
+    console.log('🔍 Содержит "хочу улучшить резюме"?', isImproveResume)
     
-    if (includesResume) {
+    if (isImproveResume) {
       console.log('✅ ПЕРЕХОДИМ К ЭКРАНУ РЕЗЮМЕ!')
       console.log('🔄 Вызываем setCurrentScreen("resume")')
       setCurrentScreen('resume')
@@ -135,10 +150,15 @@ export default function CareerMiniApp() {
         hapticFeedback.impact('light')
         setCurrentScreen("role")
       })
-    } else if (currentScreen === "main") {
+    } else if (currentScreen === "profession") {
       showBackButton(() => {
         hapticFeedback.impact('light')
         setCurrentScreen("goals")
+      })
+    } else if (currentScreen === "main") {
+      showBackButton(() => {
+        hapticFeedback.impact('light')
+        setCurrentScreen("profession")
       })
     } else if (currentScreen === "advice") {
       showBackButton(() => {
@@ -308,6 +328,87 @@ export default function CareerMiniApp() {
         </div>
       </div>
     )
+  } else if (currentScreen === "profession") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 relative overflow-hidden">
+        {/* Background decorative elements */}
+        <div className="absolute top-0 left-0 w-full h-full">
+          <div className="absolute top-32 right-8 w-24 h-24 bg-gradient-to-r from-pink-400 to-rose-400 rounded-full blur-2xl opacity-30"></div>
+          <div className="absolute bottom-32 left-8 w-32 h-32 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full blur-2xl opacity-30"></div>
+        </div>
+
+        <div className="max-w-sm mx-auto pt-8 relative z-10">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+              <User className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent mb-3">
+              Выберите профессию
+            </h1>
+            <p className="text-gray-300 text-lg">Это поможет подобрать подходящие вакансии</p>
+          </div>
+
+          <div className="space-y-3 mb-8">
+            {professions.map((profession, index) => (
+              <div
+                key={index}
+                className={`
+                  relative p-4 rounded-xl cursor-pointer transition-all duration-300 border
+                  ${
+                    selectedProfession === profession
+                      ? "bg-gradient-to-r from-blue-600 to-purple-600 border-blue-400 shadow-xl shadow-blue-500/25 scale-105"
+                      : "bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 hover:scale-102"
+                  }
+                `}
+                onClick={() => {
+                  hapticFeedback.impact('light')
+                  setSelectedProfession(profession)
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-white font-medium">{profession}</span>
+                  {selectedProfession === profession && (
+                    <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                      <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Button
+            onClick={async () => {
+              if (selectedProfession) {
+                hapticFeedback.notification('success')
+                
+                // Логируем выбор профессии
+                const professionRequest: ProfessionSelectionRequest = {
+                  user_id: user?.id?.toString(),
+                  selected_profession: selectedProfession,
+                  user_role: selectedRole || undefined,
+                  user_goal: selectedGoal,
+                  timestamp: new Date().toISOString()
+                }
+                
+                const logResponse = await logProfessionSelection(professionRequest)
+                if (logResponse?.session_id) {
+                  setSessionId(logResponse.session_id)
+                  console.log('✅ Профессия залогирована, session_id:', logResponse.session_id)
+                }
+                
+                setCurrentScreen("main")
+              }
+            }}
+            disabled={!selectedProfession}
+            className="w-full py-4 text-lg font-semibold bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 border-0 shadow-2xl shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-300"
+          >
+            <span className="mr-2">Продолжить</span>
+            <ChevronRight className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+    )
   } else if (currentScreen === "advice" && careerAdvice) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 relative overflow-hidden">
@@ -380,7 +481,20 @@ export default function CareerMiniApp() {
         </div>
       </div>
     )
-  } else {
+  } else if (currentScreen === "resume") {
+    console.log('🎯 РЕНДЕРИМ ЭКРАН РЕЗЮМЕ!')
+    return (
+      <ResumeImprovement 
+        onBack={() => {
+          hapticFeedback.impact('light')
+          setCurrentScreen("goals")
+        }}
+        selectedRole={selectedRole}
+        selectedGoal={selectedGoal}
+        selectedProfession={selectedProfession}
+      />
+    )
+  } else if (currentScreen === "main") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
         {/* Header */}
@@ -452,7 +566,16 @@ export default function CareerMiniApp() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Дополнительные услуги</h3>
             <div className="space-y-3">
               {getFilteredAdditionalServices().map((service, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow cursor-pointer">
+                <Card 
+                  key={index} 
+                  className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => {
+                    if (service.title === "Подбор подходящих вакансий") {
+                      hapticFeedback.impact('light')
+                      setCurrentScreen("profession")
+                    }
+                  }}
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -497,27 +620,18 @@ export default function CareerMiniApp() {
         </div>
       </div>
     )
-  }
-
-  console.log('🔍 ПРОВЕРКА УСЛОВИЙ РЕНДЕРИНГА:')
-  console.log('  - currentScreen === "role"?', currentScreen === "role")
-  console.log('  - currentScreen === "goals"?', currentScreen === "goals")
-  console.log('  - currentScreen === "advice"?', currentScreen === "advice")
-  console.log('  - currentScreen === "resume"?', currentScreen === "resume")
-  console.log('  - else block?', !['role', 'goals', 'advice', 'resume'].includes(currentScreen))
-  
-  if (currentScreen === "resume") {
-    console.log('🎯 РЕНДЕРИМ ЭКРАН РЕЗЮМЕ!')
+  } else if (currentScreen === "resume") {
     return (
       <ResumeImprovement 
-        onBack={() => {
-          hapticFeedback.impact('light')
-          setCurrentScreen("goals")
-        }}
+        onBack={() => setCurrentScreen("goals")}
+        selectedRole={selectedRole}
+        selectedGoal={selectedGoal}
+        selectedProfession={selectedProfession}
+        sessionId={sessionId}
       />
     )
   }
 
-  console.log('❌ НЕ НАЙДЕНО ПОДХОДЯЩЕГО УСЛОВИЯ, ВОЗВРАЩАЕМ NULL')
+  // Fallback - не должно происходить
   return null
 }

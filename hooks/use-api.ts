@@ -40,6 +40,35 @@ export interface CareerTestResponse {
   development_areas: string[];
 }
 
+// Новые интерфейсы для логирования
+export interface ProfessionSelectionRequest {
+  user_id?: string;
+  selected_profession: string;
+  user_role?: string;
+  user_goal?: string;
+  timestamp?: string;
+}
+
+export interface ProfessionSelectionResponse {
+  success: boolean;
+  message: string;
+  session_id: string;
+}
+
+export interface JobMatchingRequest {
+  session_id: string;
+  profession: string;
+  user_role?: string;
+  user_goal?: string;
+  job_url?: string;
+}
+
+export interface JobMatchingResponse {
+  jobs: any[];
+  total_count: number;
+  session_id: string;
+}
+
 // Конфигурация API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -148,6 +177,48 @@ export const useAPI = () => {
     }
   };
 
+  // Логирование выбора профессии
+  const logProfessionSelection = async (request: ProfessionSelectionRequest): Promise<ProfessionSelectionResponse | null> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiRequest<ProfessionSelectionResponse>('/log-profession-selection', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка логирования выбора профессии';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Получение подходящих вакансий
+  const getJobMatches = async (request: JobMatchingRequest): Promise<JobMatchingResponse | null> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiRequest<JobMatchingResponse>('/get-job-matches', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка получения вакансий';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     loading,
     error,
@@ -155,6 +226,8 @@ export const useAPI = () => {
     analyzeResume,
     processCareerTest,
     checkAPIStatus,
+    logProfessionSelection,
+    getJobMatches,
     clearError: () => setError(null),
   };
 };
