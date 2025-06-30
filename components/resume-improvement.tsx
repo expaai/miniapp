@@ -833,9 +833,17 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
         
         // Настройка worker для Next.js (используем локальный файл для избежания CORS)
         if (typeof window !== 'undefined') {
-          const workerSrc = '/pdf.worker.min.mjs'
-          pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
-          console.log('🔥 Worker настроен (локальный):', workerSrc)
+          try {
+            // Определяем правильный путь с учетом basePath
+            const basePath = process.env.NODE_ENV === 'production' ? '/miniapp' : ''
+            const workerSrc = `${basePath}/pdf.worker.min.mjs`
+            pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+            console.log('🔥 Worker настроен (локальный):', workerSrc)
+          } catch (error) {
+            console.warn('⚠️ Не удалось настроить локальный worker, используем CDN fallback:', error)
+            // Fallback на CDN версию
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+          }
         }
         
         console.log('🔥 Читаем файл как ArrayBuffer...')
