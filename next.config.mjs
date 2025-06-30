@@ -16,6 +16,7 @@ const nextConfig = {
   trailingSlash: true,
   distDir: 'dist',
   assetPrefix: process.env.NODE_ENV === 'production' ? '/miniapp' : '',
+  basePath: process.env.NODE_ENV === 'production' ? '/miniapp' : '',
   // Убрали deprecated experimental.esmExternals
 }
 
