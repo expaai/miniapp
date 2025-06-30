@@ -1,26 +1,29 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useTelegram } from "@/hooks/use-telegram"
+import { useAPI, CareerAdviceResponse } from "@/hooks/use-api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Home, TrendingUp, User, ChevronRight, Star, Crown, Zap, Target } from "lucide-react"
+import { Home, TrendingUp, User, ChevronRight, Star, Crown, Zap, Target, Loader2 } from "lucide-react"
+import ResumeImprovement from "@/components/resume-improvement"
 
 type Role = "student" | "professional" | null
 type Goal = string
 
 const studentGoals = [
-  "хочу создать резюме",
-  "хочу улучшить резюме",
-  "хочу определиться с профессиональной целью",
-  "хочу получить личную консультацию",
+  "Хочу создать резюме",
+  "Хочу улучшить резюме",
+  "Хочу определиться с профессиональной целью",
+  "Хочу получить личную консультацию",
 ]
 
 const professionalGoals = [
-  "хочу улучшить резюме",
-  "хочу понять свои сильные и слабые стороны",
-  "хочу получить личную консультацию",
+  "Хочу улучшить резюме",
+  "Хочу понять свои сильные и слабые стороны",
+  "Хочу получить личную консультацию",
 ]
 
 const additionalServices = [
@@ -31,10 +34,21 @@ const additionalServices = [
 ]
 
 export default function CareerMiniApp() {
-  const [currentScreen, setCurrentScreen] = useState<"role" | "goals" | "main">("role")
+  const router = useRouter()
+  const [currentScreen, setCurrentScreen] = useState<"role" | "goals" | "main" | "advice" | "resume">("role")
+  
+  // Отладка изменений currentScreen
+  useEffect(() => {
+    console.log('🔄 currentScreen изменился на:', currentScreen)
+  }, [currentScreen])
   const [selectedRole, setSelectedRole] = useState<Role>(null)
-  const [selectedGoals, setSelectedGoals] = useState<Goal[]>([])
+  const [selectedGoal, setSelectedGoal] = useState<Goal>("")
+  const [careerAdvice, setCareerAdvice] = useState<CareerAdviceResponse | null>(null)
+  
+  // Логирование для отладки
+  console.log('🔄 РЕНДЕР КОМПОНЕНТА! currentScreen:', currentScreen, 'selectedGoal:', selectedGoal)
   const { user, isReady, showMainButton, hideMainButton, showBackButton, hideBackButton, hapticFeedback } = useTelegram()
+  const { getCareerAdvice, loading, error, clearError } = useAPI()
   
   // Получаем имя пользователя из Telegram или используем по умолчанию
   const userName = user?.first_name || "Пользователь"
@@ -45,15 +59,67 @@ export default function CareerMiniApp() {
     setCurrentScreen("goals")
   }
 
-  const handleGoalToggle = (goal: Goal) => {
-    hapticFeedback.selection()
-    setSelectedGoals((prev) => (prev.includes(goal) ? prev.filter((g) => g !== goal) : [...prev, goal]))
+  const handleGoalSelect = (goal: Goal) => {
+    hapticFeedback.impact('light')
+    setSelectedGoal(goal)
   }
 
   const handleContinue = () => {
-    if (selectedGoals.length > 0) {
+    if (selectedGoal) {
       hapticFeedback.notification('success')
       setCurrentScreen("main")
+    }
+  }
+
+  const handleGetCareerAdvice = async () => {
+    console.log('🔥 КНОПКА НАЖАТА! selectedGoal:', selectedGoal, 'selectedRole:', selectedRole)
+    console.log('🔍 Текущий currentScreen ДО изменения:', currentScreen)
+    
+    if (!selectedGoal || !selectedRole) {
+      console.log('❌ Нет selectedGoal или selectedRole')
+      return
+    }
+    
+    hapticFeedback.impact('medium')
+    
+    // Если выбрана цель улучшения резюме, переходим к экрану резюме
+    console.log('🔍 Проверяем цель:', selectedGoal.toLowerCase())
+    const includesResume = selectedGoal.toLowerCase().includes('резюме')
+    console.log('🔍 Содержит "резюме"?', includesResume)
+    
+    if (includesResume) {
+      console.log('✅ ПЕРЕХОДИМ К ЭКРАНУ РЕЗЮМЕ!')
+      console.log('🔄 Вызываем setCurrentScreen("resume")')
+      setCurrentScreen('resume')
+      console.log('📱 setCurrentScreen("resume") вызван')
+      
+      // Принудительно проверяем состояние через setTimeout
+      setTimeout(() => {
+        console.log('⏰ Проверка состояния через 100мс - currentScreen должен быть "resume"')
+      }, 100)
+      
+      // Дополнительная проверка через 500мс
+      setTimeout(() => {
+        console.log('⏰ Проверка состояния через 500мс - currentScreen должен быть "resume"')
+      }, 500)
+      
+      return
+    }
+    
+    clearError()
+    
+    const request = {
+      user_goal: selectedGoal,
+      experience_level: selectedRole === 'student' ? 'junior' : 'middle',
+      current_role: selectedRole === 'student' ? undefined : 'Специалист',
+      interests: [selectedGoal]
+    }
+    
+    const response = await getCareerAdvice(request)
+    if (response) {
+      setCareerAdvice(response)
+      setCurrentScreen('advice')
+      hapticFeedback.notification('success')
     }
   }
 
@@ -74,6 +140,16 @@ export default function CareerMiniApp() {
         hapticFeedback.impact('light')
         setCurrentScreen("goals")
       })
+    } else if (currentScreen === "advice") {
+      showBackButton(() => {
+        hapticFeedback.impact('light')
+        setCurrentScreen("main")
+      })
+    } else if (currentScreen === "resume") {
+      showBackButton(() => {
+        hapticFeedback.impact('light')
+        setCurrentScreen("goals")
+      })
     } else {
       hideBackButton()
     }
@@ -82,9 +158,31 @@ export default function CareerMiniApp() {
       hideMainButton()
       hideBackButton()
     }
-  }, [currentScreen, isReady])
+  }, [currentScreen, isReady, showBackButton, hideBackButton, hideMainButton, hapticFeedback])
 
+  // Определяем текущие цели в зависимости от роли
   const currentGoals = selectedRole === "student" ? studentGoals : professionalGoals
+
+  // Функция для фильтрации дополнительных услуг
+  const getFilteredAdditionalServices = () => {
+    if (!selectedGoal) return additionalServices
+    
+    const selectedGoalLower = selectedGoal.toLowerCase()
+    
+    return additionalServices.filter(service => {
+      const serviceLower = service.title.toLowerCase()
+      
+      // Исключаем услуги, которые дублируют выбранную цель
+      if (serviceLower.includes('резюме') && selectedGoalLower.includes('резюме')) {
+        return false
+      }
+      if (serviceLower.includes('сильные и слабые стороны') && selectedGoalLower.includes('сильные и слабые стороны')) {
+        return false
+      }
+      
+      return true
+    })
+  }
 
   if (currentScreen === "role") {
     return (
@@ -126,7 +224,7 @@ export default function CareerMiniApp() {
             </Card>
 
             <Card
-              className="cursor-pointer hover:scale-105 transition-all duration-300 border-0 bg-gradient-to-r from-purple-600 to-blue-600 shadow-2xl shadow-purple-500/25 hover:shadow-purple-500/40"
+              className="cursor-pointer hover:scale-105 transition-all duration-300 border-0 bg-gradient-to-r from-blue-600 to-purple-700 shadow-2xl shadow-blue-500/25 hover:shadow-blue-500/40"
               onClick={() => handleRoleSelect("professional")}
             >
               <CardContent className="p-6 relative overflow-hidden">
@@ -134,7 +232,7 @@ export default function CareerMiniApp() {
                 <div className="flex items-center justify-between relative z-10">
                   <div>
                     <h3 className="text-xl font-bold text-white mb-2">Профессионал</h3>
-                    <p className="text-purple-100">Развиваю карьеру дальше</p>
+                    <p className="text-blue-100">Развиваю карьеру</p>
                   </div>
                   <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
                     <span className="text-3xl">💼</span>
@@ -146,9 +244,7 @@ export default function CareerMiniApp() {
         </div>
       </div>
     )
-  }
-
-  if (currentScreen === "goals") {
+  } else if (currentScreen === "goals") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 relative overflow-hidden">
         {/* Background decorative elements */}
@@ -175,26 +271,26 @@ export default function CareerMiniApp() {
                 className={`
                   relative p-5 rounded-2xl cursor-pointer transition-all duration-300 border
                   ${
-                    selectedGoals.includes(goal)
+                    selectedGoal === goal
                       ? "bg-gradient-to-r from-blue-600 to-purple-600 border-blue-400 shadow-2xl shadow-blue-500/25 scale-105"
                       : "bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 hover:scale-102"
                   }
                 `}
-                onClick={() => handleGoalToggle(goal)}
+                onClick={() => handleGoalSelect(goal)}
               >
                 <div className="flex items-center justify-between">
                   <span
-                    className={`capitalize font-medium ${selectedGoals.includes(goal) ? "text-white" : "text-gray-200"}`}
+                    className={`font-medium ${selectedGoal === goal ? "text-white" : "text-gray-200"}`}
                   >
                     {goal}
                   </span>
-                  {selectedGoals.includes(goal) && (
+                  {selectedGoal === goal && (
                     <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
                       <Zap className="w-4 h-4 text-white" />
                     </div>
                   )}
                 </div>
-                {selectedGoals.includes(goal) && (
+                {selectedGoal === goal && (
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl"></div>
                 )}
               </div>
@@ -203,7 +299,7 @@ export default function CareerMiniApp() {
 
           <Button
             onClick={handleContinue}
-            disabled={selectedGoals.length === 0}
+            disabled={!selectedGoal}
             className="w-full py-4 text-lg font-semibold bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 border-0 shadow-2xl shadow-amber-500/25 hover:shadow-amber-500/40 transition-all duration-300"
           >
             <span className="mr-2">Продолжить</span>
@@ -212,130 +308,226 @@ export default function CareerMiniApp() {
         </div>
       </div>
     )
-  }
+  } else if (currentScreen === "advice" && careerAdvice) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 relative overflow-hidden">
+        {/* Background decorative elements */}
+        <div className="absolute top-0 left-0 w-full h-full">
+          <div className="absolute top-20 left-10 w-32 h-32 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full blur-3xl opacity-20"></div>
+          <div className="absolute bottom-40 right-10 w-40 h-40 bg-gradient-to-r from-blue-400 to-cyan-400 rounded-full blur-3xl opacity-20"></div>
+        </div>
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 to-purple-900 shadow-2xl">
-        <div className="max-w-sm mx-auto p-6">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Avatar className="w-14 h-14 border-2 border-white/20">
-                <AvatarFallback className="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-lg font-bold">
-                  {userName.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full flex items-center justify-center">
-                <Crown className="w-3 h-3 text-white" />
-              </div>
+        <div className="max-w-sm mx-auto pt-8 relative z-10">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+              <Zap className="w-8 h-8 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Привет, {userName}!</h1>
-              <div className="flex items-center gap-2">
-                <span className="text-purple-200">{selectedRole === "student" ? "Студент" : "Профессионал"}</span>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent mb-3">
+              Ваш карьерный совет
+            </h1>
+            <p className="text-gray-300 text-lg">Персональные рекомендации</p>
+          </div>
+
+          <div className="space-y-6 mb-8">
+            {/* Основной совет */}
+            <Card className="bg-white/10 backdrop-blur-sm border-white/20 border">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-bold text-white mb-3">💡 Главный совет</h3>
+                <p className="text-gray-200 leading-relaxed">{careerAdvice.advice}</p>
+              </CardContent>
+            </Card>
+
+            {/* Рекомендации */}
+            <Card className="bg-white/10 backdrop-blur-sm border-white/20 border">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-bold text-white mb-3">🎯 Рекомендации</h3>
+                <div className="space-y-2">
+                  {careerAdvice.recommendations.map((rec, index) => (
+                    <div key={index} className="flex items-start gap-3">
+                      <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
+                      <p className="text-gray-200 text-sm">{rec}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Следующие шаги */}
+            <Card className="bg-white/10 backdrop-blur-sm border-white/20 border">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-bold text-white mb-3">🚀 Следующие шаги</h3>
+                <div className="space-y-3">
+                  {careerAdvice.next_steps.map((step, index) => (
+                    <div key={index} className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs font-bold">{index + 1}</span>
+                      </div>
+                      <p className="text-gray-200 text-sm">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Button
+            onClick={() => setCurrentScreen("main")}
+            className="w-full py-4 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 border-0 shadow-2xl shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-300"
+          >
+            <span className="mr-2">Вернуться к главной</span>
+            <Home className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+    )
+  } else {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 to-purple-900 shadow-2xl">
+          <div className="max-w-sm mx-auto p-6">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Avatar className="w-14 h-14 border-2 border-white/20">
+                  <AvatarFallback className="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-lg font-bold">
+                    {userName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white"></div>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-white">{userName}</h2>
+                <p className="text-gray-300 text-sm capitalize">{selectedRole === "student" ? "Студент" : "Профессионал"}</p>
+              </div>
+              <div className="text-right">
+                <div className="flex items-center gap-1 text-amber-400">
+                  <Star className="w-4 h-4 fill-current" />
+                  <span className="text-sm font-semibold">4.9</span>
+                </div>
+                <p className="text-gray-400 text-xs">Рейтинг</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-sm mx-auto p-4 pb-24">
-        {/* Current Task */}
-        <div className="mb-8 mt-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <Zap className="w-6 h-6 text-amber-500 mr-2" />
-            На повестке:
-          </h2>
-          <Card className="border-0 bg-gradient-to-r from-blue-600 to-purple-600 shadow-2xl shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-300 hover:scale-105">
-            <CardContent className="p-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-              <div className="flex items-center justify-between relative z-10">
-                <div>
-                  <h3 className="font-bold text-white text-lg capitalize mb-2">{selectedGoals[0]}</h3>
-                  <p className="text-blue-100 mb-3">Начать сейчас</p>
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 bg-emerald-400 rounded-full mr-2"></div>
-                    <span className="text-sm text-blue-100">Готово к запуску</span>
-                  </div>
+        {/* Main Content */}
+        <div className="max-w-sm mx-auto p-6">
+          {/* Selected Goal Card */}
+          <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <Target className="w-5 h-5 text-white" />
                 </div>
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <ChevronRight className="w-6 h-6 text-white" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Ваша цель</h3>
+                  <p className="text-sm text-gray-600">{selectedGoal}</p>
                 </div>
               </div>
+              <Button
+                onClick={() => {
+                  console.log('🎯 КНОПКА НАЖАТА! selectedGoal:', selectedGoal)
+                  console.log('🔍 Проверяем цель:', selectedGoal)
+                  console.log('🔍 Содержит "резюме"?', selectedGoal.includes('резюме'))
+                  if (selectedGoal.includes('резюме')) {
+                    console.log('✅ ПЕРЕХОДИМ К ЭКРАНУ РЕЗЮМЕ!')
+                    router.push('/test-resume')
+                  } else {
+                    handleGetCareerAdvice()
+                  }
+                }}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white border-0 shadow-lg"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Получаем совет...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Получить карьерный совет
+                  </>
+                )}
+              </Button>
+              {error && (
+                <p className="text-red-600 text-sm mt-2 text-center">{error}</p>
+              )}
             </CardContent>
           </Card>
+
+          {/* Additional Services */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Дополнительные услуги</h3>
+            <div className="space-y-3">
+              {getFilteredAdditionalServices().map((service, index) => (
+                <Card key={index} className="hover:shadow-md transition-shadow cursor-pointer">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{service.icon}</span>
+                        <div>
+                          <h4 className="font-medium text-gray-900">{service.title}</h4>
+                          {service.premium && (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full mt-1">
+                              <Crown className="w-3 h-3" />
+                              Premium
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-gray-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Additional Services */}
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <Star className="w-6 h-6 text-amber-500 mr-2" />
-            Дополнительные возможности
-          </h2>
-          <div className="space-y-4">
-            {additionalServices.map((service, index) => (
-              <Card
-                key={index}
-                className={`cursor-pointer transition-all duration-300 hover:scale-105 border-0 shadow-xl ${
-                  service.premium
-                    ? "bg-gradient-to-r from-amber-50 to-orange-50 shadow-amber-500/10 hover:shadow-amber-500/20"
-                    : "bg-white shadow-gray-500/10 hover:shadow-gray-500/20"
-                }`}
-              >
-                <CardContent className="p-5 relative overflow-hidden">
-                  {service.premium && (
-                    <div className="absolute top-2 right-2">
-                      <Crown className="w-4 h-4 text-amber-500" />
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                          service.premium
-                            ? "bg-gradient-to-r from-amber-500 to-orange-600"
-                            : "bg-gradient-to-r from-gray-500 to-gray-600"
-                        }`}
-                      >
-                        <span className="text-xl">{service.icon}</span>
-                      </div>
-                      <div>
-                        <span className={`font-semibold ${service.premium ? "text-gray-900" : "text-gray-900"}`}>
-                          {service.title}
-                        </span>
-                        {service.premium && <div className="text-xs text-amber-600 font-medium">Премиум функция</div>}
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+        {/* Bottom Navigation */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
+          <div className="max-w-sm mx-auto px-6 py-4">
+            <div className="flex justify-around">
+              <Button variant="ghost" className="flex-col h-auto py-3 px-6 bg-blue-50 text-blue-600 rounded-2xl">
+                <Home className="w-6 h-6 mb-1" />
+                <span className="text-xs">Главная</span>
+              </Button>
+              <Button variant="ghost" className="flex-col h-auto py-3 px-6 hover:bg-gray-50 rounded-2xl">
+                <TrendingUp className="w-6 h-6 mb-1 text-gray-400" />
+                <span className="text-xs text-gray-400">Статистика</span>
+              </Button>
+              <Button variant="ghost" className="flex-col h-auto py-3 px-6 hover:bg-gray-50 rounded-2xl">
+                <User className="w-6 h-6 mb-1 text-gray-400" />
+                <span className="text-xs text-gray-400">Профиль</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
+    )
+  }
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-gray-200/50 shadow-2xl">
-        <div className="max-w-sm mx-auto">
-          <div className="flex justify-around py-3">
-            <Button variant="ghost" className="flex-col h-auto py-3 px-6 bg-blue-50 text-blue-600 rounded-2xl">
-              <Home className="w-6 h-6 mb-1" />
-              <span className="text-xs font-semibold">Главная</span>
-            </Button>
-            <Button variant="ghost" className="flex-col h-auto py-3 px-6 hover:bg-gray-50 rounded-2xl">
-              <TrendingUp className="w-6 h-6 mb-1 text-gray-400" />
-              <span className="text-xs text-gray-400">Мой путь</span>
-            </Button>
-            <Button variant="ghost" className="flex-col h-auto py-3 px-6 hover:bg-gray-50 rounded-2xl">
-              <User className="w-6 h-6 mb-1 text-gray-400" />
-              <span className="text-xs text-gray-400">Профиль</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  console.log('🔍 ПРОВЕРКА УСЛОВИЙ РЕНДЕРИНГА:')
+  console.log('  - currentScreen === "role"?', currentScreen === "role")
+  console.log('  - currentScreen === "goals"?', currentScreen === "goals")
+  console.log('  - currentScreen === "advice"?', currentScreen === "advice")
+  console.log('  - currentScreen === "resume"?', currentScreen === "resume")
+  console.log('  - else block?', !['role', 'goals', 'advice', 'resume'].includes(currentScreen))
+  
+  if (currentScreen === "resume") {
+    console.log('🎯 РЕНДЕРИМ ЭКРАН РЕЗЮМЕ!')
+    return (
+      <ResumeImprovement 
+        onBack={() => {
+          hapticFeedback.impact('light')
+          setCurrentScreen("goals")
+        }}
+      />
+    )
+  }
+
+  console.log('❌ НЕ НАЙДЕНО ПОДХОДЯЩЕГО УСЛОВИЯ, ВОЗВРАЩАЕМ NULL')
+  return null
 }

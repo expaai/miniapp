@@ -4,6 +4,8 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   typescript: {
+    // Временно игнорируем ошибки TypeScript для быстрой разработки
+    // В продакшене следует убрать эту настройку
     ignoreBuildErrors: true,
   },
   images: {
@@ -14,9 +16,7 @@ const nextConfig = {
   trailingSlash: true,
   distDir: 'dist',
   assetPrefix: process.env.NODE_ENV === 'production' ? '/miniapp' : '',
-  experimental: {
-    esmExternals: false,
-  },
+  // Убрали deprecated experimental.esmExternals
 }
 
 export default nextConfig
