@@ -425,17 +425,7 @@ export default function CareerMiniApp() {
                 </div>
               </div>
               <Button
-                onClick={() => {
-                  console.log('🎯 КНОПКА НАЖАТА! selectedGoal:', selectedGoal)
-                  console.log('🔍 Проверяем цель:', selectedGoal)
-                  console.log('🔍 Содержит "резюме"?', selectedGoal.includes('резюме'))
-                  if (selectedGoal.includes('резюме')) {
-                    console.log('✅ ПЕРЕХОДИМ К ЭКРАНУ РЕЗЮМЕ!')
-                    router.push('/test-resume')
-                  } else {
-                    handleGetCareerAdvice()
-                  }
-                }}
+                onClick={handleGetCareerAdvice}
                 disabled={loading}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white border-0 shadow-lg"
               >
