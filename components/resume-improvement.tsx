@@ -814,83 +814,37 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
   }
 
   const extractTextFromFile = async (file: File): Promise<string> => {
-    console.log('🔥 Начинаем извлечение текста из файла:', file.name, 'тип:', file.type, 'размер:', file.size, 'байт')
+    console.log('🔥 Отправляем файл на сервер для обработки:', file.name, 'тип:', file.type, 'размер:', file.size, 'байт')
     
-    if (file.type === 'text/plain') {
-      console.log('🔥 Обрабатываем TXT файл')
-      const text = await file.text()
-      console.log('🔥 TXT текст извлечен, длина:', text.length, 'символов')
-      return text
-    }
-    
-    if (file.type === 'application/pdf') {
-      console.log('🔥 Начинаем обработку PDF файла')
-      try {
-        console.log('🔥 Импортируем pdfjs-dist...')
-        // Динамический импорт pdfjs-dist
-        const pdfjsLib = await import('pdfjs-dist')
-        console.log('🔥 pdfjs-dist импортирован, версия:', pdfjsLib.version)
-        
-        // Настройка worker для Next.js (используем локальный файл для избежания CORS)
-        if (typeof window !== 'undefined') {
-          try {
-            // Определяем правильный путь с учетом basePath
-            const basePath = process.env.NODE_ENV === 'production' ? '/miniapp' : ''
-            const workerSrc = `${basePath}/pdf.worker.min.mjs`
-            pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
-            console.log('🔥 Worker настроен (локальный):', workerSrc)
-          } catch (error) {
-            console.warn('⚠️ Не удалось настроить локальный worker, используем CDN fallback:', error)
-            // Fallback на CDN версию
-            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-          }
-        }
-        
-        console.log('🔥 Читаем файл как ArrayBuffer...')
-        const arrayBuffer = await file.arrayBuffer()
-        console.log('🔥 ArrayBuffer получен, размер:', arrayBuffer.byteLength, 'байт')
-        
-        console.log('🔥 Загружаем PDF документ...')
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-        console.log('🔥 PDF загружен, количество страниц:', pdf.numPages)
-        
-        let fullText = ''
-        
-        // Извлекаем текст из всех страниц
-        for (let i = 1; i <= pdf.numPages; i++) {
-          console.log(`🔥 Обрабатываем страницу ${i}/${pdf.numPages}...`)
-          const page = await pdf.getPage(i)
-          const textContent = await page.getTextContent()
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(' ')
-          fullText += pageText + '\n'
-          console.log(`🔥 Страница ${i} обработана, извлечено ${pageText.length} символов`)
-        }
-        
-        console.log('🔥 Общая длина извлеченного текста:', fullText.length, 'символов')
-        
-        if (!fullText.trim()) {
-          console.log('🔥 ОШИБКА: PDF не содержит текста')
-          throw new Error('PDF файл не содержит текста или текст не может быть извлечен.')
-        }
-        
-        console.log('🔥 PDF успешно обработан')
-        return fullText
-      } catch (error) {
-        console.error('🔥 ОШИБКА при чтении PDF:', error)
-        console.error('🔥 Тип ошибки:', error.constructor.name)
-        console.error('🔥 Сообщение ошибки:', error.message)
-        throw new Error(`Не удалось прочитать PDF файл: ${error.message}. Попробуйте сохранить резюме в текстовом формате (.txt).`)
+    try {
+      // Создаем FormData для отправки файла
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      // Отправляем файл на backend
+      const response = await fetch('http://localhost:8000/upload-resume', {
+        method: 'POST',
+        body: formData
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`)
       }
+      
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+      
+      console.log('🔥 Текст успешно извлечен на сервере:', result.message)
+      return result.extracted_text
+      
+    } catch (error) {
+      console.error('🔥 ОШИБКА при обработке файла на сервере:', error)
+      throw new Error(`Не удалось обработать файл: ${error.message}`)
     }
-    
-    if (file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      // Для Word файлов предлагаем альтернативу
-      throw new Error('Пожалуйста, сохраните резюме в текстовом формате (.txt) для анализа.')
-    }
-    
-    return await file.text()
   }
 
   const formatAIResponse = (response: string): string => {
@@ -916,90 +870,38 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
   }
 
   const analyzeResumeWithAI = async (resumeText: string, profession: string, jobUrl?: string) => {
-    // Ограничиваем длину текста резюме для избежания превышения лимитов токенов
-    const maxResumeLength = 6000 // примерно 1500 токенов для резюме
-    const truncatedResumeText = resumeText.length > maxResumeLength 
-      ? resumeText.substring(0, maxResumeLength) + "\n\n[Текст резюме обрезан для анализа]"
-      : resumeText
-
+    console.log('🔥 Отправляем резюме на анализ через backend API')
     console.log('🔥 Длина текста резюме:', resumeText.length, 'символов')
-    console.log('🔥 Обрезанная длина:', truncatedResumeText.length, 'символов')
-
-    const prompt = `Ты HR-специалист. Проанализируй резюме на позицию "${profession}"${jobUrl ? ` (вакансия: ${jobUrl})` : ''}.
-
-Оцени:
-1. Структуру и читаемость
-2. Полноту информации и достижения
-3. Формулировки (глаголы vs существительные)
-4. Карьерный путь
-5. Соответствие позиции
-6. ATS-оптимизацию
-
-Ответ структурируй:
-- Общее впечатление (2-3 предложения)
-- Сильные стороны (3-4 пункта)
-- Области улучшения (3-4 рекомендации)
-- Примеры переформулировок (1-2)
-- Адаптация под рынок РФ
-- Приоритетные изменения
-
-Резюме:
-${truncatedResumeText}`
+    console.log('🔥 Профессия:', profession)
+    console.log('🔥 URL вакансии:', jobUrl || 'не указан')
 
     try {
-      // Проверяем наличие API ключа
-      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
-      if (!apiKey) {
-        throw new Error('OpenAI API ключ не настроен')
-      }
-
-      // Создаем контроллер для отмены запроса по таймауту
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 секунд таймаут
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // Отправляем запрос на backend для анализа
+      const response = await fetch('http://localhost:8000/analyze-resume-ai', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{
-            role: 'user',
-            content: prompt
-          }],
-          max_tokens: 4000,
-          temperature: 0.7
-        }),
-        signal: controller.signal
+          resume_text: resumeText,
+          profession: profession,
+          job_url: jobUrl
+        })
       })
 
-      clearTimeout(timeoutId)
-
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`)
       }
 
-      const data = await response.json()
-      const rawContent = data.choices[0].message.content
+      const result = await response.json()
       
-      // Очищаем markdown элементы из ответа
-      const cleanContent = rawContent
-        .replace(/#{1,6}\s*/g, '') // убираем заголовки #
-        .replace(/\*\*(.*?)\*\*/g, '$1') // убираем жирный текст **
-        .replace(/\*(.*?)\*/g, '$1') // убираем курсив *
-        .replace(/`(.*?)`/g, '$1') // убираем код `
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // убираем ссылки [text](url)
-        .replace(/^\s*[-*+]\s+/gm, '• ') // заменяем markdown списки на простые
-        .replace(/^\s*\d+\.\s+/gm, '') // убираем нумерованные списки
-        .trim()
+      if (!result.success) {
+        throw new Error(result.message)
+      }
       
-      console.log('🔥 Исходный ответ ИИ:', rawContent.substring(0, 200) + '...')
-      console.log('🔥 Очищенный ответ:', cleanContent.substring(0, 200) + '...')
-      
-      return cleanContent
+      console.log('🔥 Анализ успешно получен с сервера')
+       return result.analysis
     } catch (error) {
       console.error('Ошибка анализа резюме:', error)
       if (error.name === 'AbortError') {

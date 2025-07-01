@@ -12,7 +12,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // Оптимизация для Telegram Mini App
-  output: 'export',
+  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   trailingSlash: true,
   distDir: 'dist',
   assetPrefix: process.env.NODE_ENV === 'production' ? '/miniapp' : '',

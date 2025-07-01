@@ -1,10 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import openai
+from openai import OpenAI
 import os
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 from datetime import datetime
+import PyPDF2
+from docx import Document
+import io
+import pdfplumber
+import fitz  # PyMuPDF
 
 app = FastAPI(title="Career Mini App API", version="1.0.0")
 
@@ -75,6 +84,124 @@ class JobMatchingResponse(BaseModel):
     jobs: List[dict]
     total_count: int
     session_id: str
+
+class ResumeUploadResponse(BaseModel):
+    success: bool
+    extracted_text: str
+    file_type: str
+    message: str
+
+class ResumeAnalysisAIRequest(BaseModel):
+    resume_text: str
+    profession: str
+    job_url: Optional[str] = None
+
+class ResumeAnalysisAIResponse(BaseModel):
+    analysis: str
+    success: bool
+    message: str
+
+# Функции для обработки файлов
+def extract_text_from_pdf(file_content: bytes) -> str:
+    """Извлечение текста из PDF файла с несколькими методами"""
+    
+    # Метод 1: PyMuPDF (fitz) - самый надежный
+    try:
+        pdf_document = fitz.open(stream=file_content, filetype="pdf")
+        text = ""
+        for page_num in range(pdf_document.page_count):
+            page = pdf_document[page_num]
+            text += page.get_text() + "\n"
+        pdf_document.close()
+        
+        if text.strip():
+            print(f"✅ PDF обработан через PyMuPDF: {len(text)} символов")
+            return text.strip()
+    except Exception as e:
+        print(f"⚠️ PyMuPDF не смог обработать PDF: {str(e)}")
+    
+    # Метод 2: pdfplumber - хорош для таблиц и сложной разметки
+    try:
+        with pdfplumber.open(io.BytesIO(file_content)) as pdf:
+            text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        
+        if text.strip():
+            print(f"✅ PDF обработан через pdfplumber: {len(text)} символов")
+            return text.strip()
+    except Exception as e:
+        print(f"⚠️ pdfplumber не смог обработать PDF: {str(e)}")
+    
+    # Метод 3: PyPDF2 - резервный вариант
+    try:
+        pdf_file = io.BytesIO(file_content)
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        
+        text = ""
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        
+        if text.strip():
+            print(f"✅ PDF обработан через PyPDF2: {len(text)} символов")
+            return text.strip()
+    except Exception as e:
+        print(f"⚠️ PyPDF2 не смог обработать PDF: {str(e)}")
+    
+    # Если все методы не сработали
+    raise ValueError("PDF файл не содержит извлекаемого текста или поврежден. Попробуйте сохранить файл в другом формате (DOCX или TXT) или используйте другой PDF-файл.")
+
+def extract_text_from_docx(file_content: bytes) -> str:
+    """Извлечение текста из DOCX файла"""
+    try:
+        docx_file = io.BytesIO(file_content)
+        doc = Document(docx_file)
+        
+        text = ""
+        # Извлекаем текст из параграфов
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                text += paragraph.text + "\n"
+        
+        # Извлекаем текст из таблиц
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.text.strip():
+                        text += cell.text + " "
+                text += "\n"
+        
+        if not text.strip():
+            raise ValueError("DOCX файл не содержит текста")
+        
+        print(f"✅ DOCX обработан: {len(text)} символов")
+        return text.strip()
+    except Exception as e:
+        print(f"⚠️ Ошибка при чтении DOCX: {str(e)}")
+        raise ValueError(f"Не удалось обработать DOCX файл: {str(e)}. Убедитесь, что файл не поврежден.")
+
+def extract_text_from_txt(file_content: bytes) -> str:
+    """Извлечение текста из TXT файла с поддержкой различных кодировок"""
+    encodings = ['utf-8', 'cp1251', 'latin-1', 'utf-16', 'ascii']
+    
+    for encoding in encodings:
+        try:
+            text = file_content.decode(encoding)
+            if text.strip():
+                print(f"✅ TXT обработан с кодировкой {encoding}: {len(text)} символов")
+                return text.strip()
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            print(f"⚠️ Ошибка с кодировкой {encoding}: {str(e)}")
+            continue
+    
+    # Если ни одна кодировка не подошла
+    raise ValueError("Не удалось определить кодировку TXT файла. Попробуйте сохранить файл в UTF-8.")
 
 # Эндпоинты
 @app.get("/")
@@ -352,6 +479,186 @@ async def get_job_matches(request: JobMatchingRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения вакансий: {str(e)}")
+
+@app.post("/upload-resume", response_model=ResumeUploadResponse)
+async def upload_resume(file: UploadFile = File(...)):
+    """
+    Загрузка и извлечение текста из файла резюме с улучшенной диагностикой
+    """
+    print(f"📄 Получен файл: {file.filename}, тип: {file.content_type}, размер: {file.size if hasattr(file, 'size') else 'неизвестен'}")
+    
+    try:
+        # Расширенный список поддерживаемых типов файлов
+        allowed_types = {
+            'application/pdf': 'pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+            'application/msword': 'doc',
+            'text/plain': 'txt',
+            'text/plain; charset=utf-8': 'txt',
+            'application/octet-stream': 'unknown'  # Для файлов с неопределенным типом
+        }
+        
+        # Определяем тип файла по расширению, если MIME-тип неизвестен
+        file_type = None
+        if file.content_type in allowed_types:
+            file_type = allowed_types[file.content_type]
+        elif file.filename:
+            extension = file.filename.lower().split('.')[-1]
+            if extension == 'pdf':
+                file_type = 'pdf'
+            elif extension in ['docx']:
+                file_type = 'docx'
+            elif extension in ['doc']:
+                file_type = 'doc'
+            elif extension in ['txt']:
+                file_type = 'txt'
+        
+        if not file_type or file_type == 'unknown':
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Неподдерживаемый тип файла: {file.content_type} ({file.filename}). Поддерживаются: PDF, DOCX, DOC, TXT"
+            )
+        
+        # Читаем содержимое файла
+        file_content = await file.read()
+        actual_size = len(file_content)
+        print(f"📊 Фактический размер файла: {actual_size} байт")
+        
+        if actual_size == 0:
+            raise HTTPException(status_code=400, detail="Файл пустой")
+        
+        # Ограничиваем размер файла (10MB)
+        max_size = 10 * 1024 * 1024  # 10MB
+        if actual_size > max_size:
+            raise HTTPException(status_code=400, detail=f"Файл слишком большой ({actual_size} байт, максимум 10MB)")
+        
+        # Извлекаем текст в зависимости от типа файла
+        print(f"🔍 Начинаем извлечение текста из {file_type.upper()} файла...")
+        
+        try:
+            if file_type == 'pdf':
+                extracted_text = extract_text_from_pdf(file_content)
+            elif file_type == 'docx':
+                extracted_text = extract_text_from_docx(file_content)
+            elif file_type == 'doc':
+                # DOC файлы сложнее обрабатывать, предлагаем конвертировать в DOCX
+                raise ValueError("Файлы .doc не поддерживаются. Пожалуйста, сохраните файл в формате .docx или .txt")
+            elif file_type == 'txt':
+                extracted_text = extract_text_from_txt(file_content)
+            else:
+                raise ValueError(f"Неподдерживаемый тип файла: {file_type}")
+            
+            # Проверяем минимальную длину текста
+            text_length = len(extracted_text.strip())
+            print(f"📝 Извлечено {text_length} символов текста")
+            
+            if text_length < 50:
+                raise ValueError(f"Извлеченный текст слишком короткий для анализа ({text_length} символов, минимум 50)")
+            
+            # Показываем первые 200 символов для диагностики
+            preview = extracted_text[:200] + "..." if len(extracted_text) > 200 else extracted_text
+            print(f"📖 Превью текста: {preview}")
+            
+            return ResumeUploadResponse(
+                success=True,
+                extracted_text=extracted_text,
+                file_type=file_type,
+                message=f"✅ Текст успешно извлечен из {file_type.upper()} файла ({text_length} символов)"
+            )
+            
+        except ValueError as ve:
+            print(f"❌ Ошибка извлечения текста: {str(ve)}")
+            return ResumeUploadResponse(
+                success=False,
+                extracted_text="",
+                file_type=file_type,
+                message=str(ve)
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"💥 Неожиданная ошибка: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка обработки файла: {str(e)}")
+
+@app.post("/analyze-resume-ai", response_model=ResumeAnalysisAIResponse)
+async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
+    """
+    Анализ резюме с помощью OpenAI API
+    """
+    try:
+        # Проверяем наличие API ключа
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            return ResumeAnalysisAIResponse(
+                analysis="",
+                success=False,
+                message="OpenAI API ключ не настроен на сервере"
+            )
+        
+        # Ограничиваем длину текста резюме
+        max_resume_length = 6000
+        truncated_resume_text = request.resume_text[:max_resume_length]
+        if len(request.resume_text) > max_resume_length:
+            truncated_resume_text += "\n\n[Текст резюме обрезан для анализа]"
+        
+        # Формируем промпт
+        prompt = f"""Ты HR-специалист. Проанализируй резюме на позицию "{request.profession}"{f' (вакансия: {request.job_url})' if request.job_url else ''}.
+
+Оцени:
+1. Структуру и читаемость
+2. Полноту информации и достижения
+3. Формулировки (глаголы vs существительные)
+4. Карьерный путь
+5. Соответствие позиции
+6. ATS-оптимизацию
+
+Ответ структурируй:
+- Общее впечатление (2-3 предложения)
+- Сильные стороны (3-4 пункта)
+- Области улучшения (3-4 рекомендации)
+- Примеры переформулировок (1-2)
+- Адаптация под рынок РФ
+- Приоритетные изменения
+
+Резюме:
+{truncated_resume_text}"""
+        
+        # Настраиваем OpenAI клиент
+        client = OpenAI(api_key=api_key)
+        
+        # Делаем запрос к OpenAI
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=4000,
+            temperature=0.7
+        )
+        
+        analysis = response.choices[0].message.content
+        
+        # Очищаем markdown элементы
+        clean_analysis = analysis\
+            .replace('#', '')\
+            .replace('**', '')\
+            .replace('*', '')\
+            .replace('`', '')\
+            .strip()
+        
+        return ResumeAnalysisAIResponse(
+            analysis=clean_analysis,
+            success=True,
+            message="Анализ резюме успешно выполнен"
+        )
+        
+    except Exception as e:
+        return ResumeAnalysisAIResponse(
+            analysis="",
+            success=False,
+            message=f"Ошибка при анализе резюме: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
