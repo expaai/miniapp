@@ -285,9 +285,18 @@ https://yourusername.github.io/career-miniapp/
 Создайте файл `.env.local`:
 
 ```env
+# URL для API backend (ОБЯЗАТЕЛЬНО для продакшена)
+NEXT_PUBLIC_API_URL=https://your-backend-domain.com
+
+# Настройки для Telegram Mini App
 NEXT_PUBLIC_APP_URL=https://yourusername.github.io/career-miniapp
 NEXT_PUBLIC_BOT_USERNAME=your_bot_username
+
+# OpenAI API ключ (если используется фронтенд)
+NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key
 ```
+
+**ВАЖНО**: Замените `https://your-backend-domain.com` на реальный URL вашего развернутого backend сервера. Без этого миниапп не сможет обрабатывать файлы резюме.
 
 ### Настройка домена
 

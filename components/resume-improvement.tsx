@@ -4,6 +4,9 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { useAPI, JobMatchingRequest } from "@/hooks/use-api"
+
+// Конфигурация API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -822,7 +825,7 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
       formData.append('file', file)
       
       // Отправляем файл на backend
-      const response = await fetch('http://localhost:8000/upload-resume', {
+      const response = await fetch(`${API_BASE_URL}/upload-resume`, {
         method: 'POST',
         body: formData
       })
@@ -877,7 +880,7 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
 
     try {
       // Отправляем запрос на backend для анализа
-      const response = await fetch('http://localhost:8000/analyze-resume-ai', {
+      const response = await fetch(`${API_BASE_URL}/analyze-resume-ai`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
