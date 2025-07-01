@@ -15,7 +15,6 @@ const nextConfig = {
   output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   trailingSlash: true,
   distDir: 'dist',
-  basePath: '/miniapp',
   // Переменные окружения
   env: {
     NEXT_PUBLIC_API_URL: process.env.NODE_ENV === 'production' ? 'https://api.expa-ai.ru' : 'http://localhost:8000',
