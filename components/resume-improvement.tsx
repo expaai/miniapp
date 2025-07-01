@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react"
 import { useAPI, JobMatchingRequest } from "@/hooks/use-api"
 
 // Конфигурация API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.expa-ai.ru'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

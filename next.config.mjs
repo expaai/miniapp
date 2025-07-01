@@ -17,6 +17,10 @@ const nextConfig = {
   distDir: 'dist',
   assetPrefix: process.env.NODE_ENV === 'production' ? '/miniapp' : '',
   basePath: process.env.NODE_ENV === 'production' ? '/miniapp' : '',
+  // Переменные окружения
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NODE_ENV === 'production' ? 'https://api.expa-ai.ru' : 'http://localhost:8000',
+  },
   // Конфигурация headers для PDF worker файлов
   async headers() {
     return [

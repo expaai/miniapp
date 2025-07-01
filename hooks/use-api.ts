@@ -70,7 +70,7 @@ export interface JobMatchingResponse {
 }
 
 // Конфигурация API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.expa-ai.ru';
 
 // Утилита для API запросов
 const apiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
