@@ -167,6 +167,25 @@ npm start
 - **Бэкенд**: Railway.app, Render.com, DigitalOcean
 - **Фронтенд**: Vercel, Netlify, Railway.app
 
+1. **Деплой backend на Heroku:**
+```bash
+cd backend
+# Следуйте инструкциям в DEPLOY_HEROKU.md
+# Или используйте кнопку Deploy to Heroku
+```
+
+2. **Обновите .env.local в фронтенде:**
+```env
+NEXT_PUBLIC_API_URL=https://your-heroku-app.herokuapp.com
+NEXT_PUBLIC_APP_URL=https://expaai.github.io/miniapp/
+```
+
+3. **Настройте переменные на Heroku:**
+```bash
+heroku config:set OPENAI_API_KEY=your_key
+heroku config:set ALLOWED_ORIGINS="https://expaai.github.io,https://t.me"
+```
+
 ## 🔐 Безопасность
 
 - ✅ CORS настроен для безопасной работы

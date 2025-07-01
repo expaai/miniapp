@@ -18,13 +18,19 @@ import fitz  # PyMuPDF
 app = FastAPI(title="Career Mini App API", version="1.0.0")
 
 # CORS middleware для фронтенда
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://expaai.github.io").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Health check endpoint для мониторинга
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 # Модели данных
 class CareerAdviceRequest(BaseModel):

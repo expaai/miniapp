@@ -1,0 +1,35 @@
+{
+  "name": "career-miniapp-backend",
+  "description": "Backend API для Career Mini App - обработка резюме и AI анализ",
+  "image": "heroku/python",
+  "stack": "heroku-22",
+  "keywords": ["python", "fastapi", "ai", "resume", "career"],
+  "website": "https://expaai.github.io/miniapp/",
+  "repository": "https://github.com/expaai/miniapp",
+  "env": {
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API ключ для анализа резюме",
+      "required": true
+    },
+    "ENVIRONMENT": {
+      "description": "Окружение приложения",
+      "value": "production"
+    },
+    "ALLOWED_ORIGINS": {
+      "description": "Разрешенные домены для CORS",
+      "value": "https://expaai.github.io,https://t.me"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "addons": [],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}
