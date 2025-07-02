@@ -61,6 +61,30 @@ jobs:
           chown -R www-data:www-data /var/www/expa-ai.ru
           chmod -R 755 /var/www/expa-ai.ru
           
+          # Деплой backend
+          echo "🔧 Деплой backend..."
+          cd backend
+          
+          # Остановить существующий backend
+          docker-compose down || true
+          
+          # Обновить зависимости Python
+          docker-compose build --no-cache
+          
+          # Запустить backend
+          docker-compose up -d
+          
+          # Проверить статус backend
+          sleep 10
+          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ Backend успешно запущен!"
+          else
+            echo "❌ Ошибка запуска backend"
+            docker-compose logs career-backend
+          fi
+          
+          cd ..
+          
           # Перезапустить Nginx
           systemctl reload nginx
           
