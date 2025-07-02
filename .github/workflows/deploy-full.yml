@@ -1,0 +1,119 @@
+name: Deploy Full Stack to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build application
+      run: npm run build
+
+    - name: Deploy Frontend to VPS
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          # Create backup of current frontend
+          sudo cp -r /var/www/expa-ai.ru /var/www/expa-ai.ru.backup.$(date +%Y%m%d_%H%M%S)
+          
+          # Clear current frontend directory
+          sudo rm -rf /var/www/expa-ai.ru/*
+          
+          # Clone repository
+          cd /tmp
+          rm -rf career-miniapp
+          git clone https://github.com/${{ github.repository }}.git career-miniapp
+          cd career-miniapp
+          
+          # Install dependencies and build
+          npm ci
+          npm run build
+          
+          # Copy built files to web directory
+          sudo cp -r dist/* /var/www/expa-ai.ru/
+          
+          # Set proper permissions
+          sudo chown -R www-data:www-data /var/www/expa-ai.ru
+          sudo chmod -R 755 /var/www/expa-ai.ru
+          
+          # Reload nginx
+          sudo systemctl reload nginx
+          
+          # Cleanup
+          cd /
+          rm -rf /tmp/career-miniapp
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: deploy-frontend
+    steps:
+    - name: Deploy Backend to VPS
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          # Stop backend service
+          sudo systemctl stop career-backend
+          
+          # Create backup
+          sudo cp -r /opt/career-backend /opt/career-backend.backup.$(date +%Y%m%d_%H%M%S)
+          
+          # Clone repository
+          cd /tmp
+          rm -rf career-miniapp
+          git clone https://github.com/${{ github.repository }}.git career-miniapp
+          
+          # Copy backend files
+          sudo cp -r career-miniapp/backend/* /opt/career-backend/
+          
+          # Activate virtual environment and update dependencies
+          cd /opt/career-backend
+          source venv/bin/activate
+          
+          # Update pip
+          pip install --upgrade pip
+          
+          # Force reinstall all dependencies to ensure httpx update
+          pip install --force-reinstall -r requirements.txt
+          
+          # Verify httpx version
+          python -c "import httpx; print(f'httpx version: {httpx.__version__}')"
+          
+          # Set proper permissions
+          sudo chown -R career-user:career-user /opt/career-backend
+          
+          # Start backend service
+          sudo systemctl start career-backend
+          
+          # Wait for service to start
+          sleep 10
+          
+          # Check service status
+          sudo systemctl status career-backend
+          
+          # Health check
+          curl -f http://localhost:8000/health || exit 1
+          
+          # Cleanup
+          rm -rf /tmp/career-miniapp
+          
+          echo "Backend deployment completed successfully"

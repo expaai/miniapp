@@ -1,0 +1,79 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci --legacy-peer-deps
+      
+    - name: Build application
+      run: npm run build
+      env:
+        NODE_ENV: production
+        
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          # Остановить Nginx (если нужно)
+          # systemctl stop nginx
+          
+          # Создать backup текущей версии
+          if [ -d "/var/www/expa-ai.ru" ]; then
+            cp -r /var/www/expa-ai.ru /var/www/expa-ai.ru.backup.$(date +%Y%m%d_%H%M%S)
+          fi
+          
+          # Очистить директорию
+          rm -rf /var/www/expa-ai.ru/*
+          
+          # Клонировать репозиторий
+          cd /tmp
+          rm -rf career-miniapp
+          git clone https://github.com/${{ github.repository }}.git career-miniapp
+          cd career-miniapp
+          
+          # Установить зависимости и собрать проект
+          npm ci --legacy-peer-deps
+          npm run build
+          
+          # Скопировать собранные файлы из dist в корень сайта
+          cp -r dist/* /var/www/expa-ai.ru/
+          
+          # Убедиться что index.html в корне
+          if [ -f "/var/www/expa-ai.ru/index.html" ]; then
+            echo "✅ index.html найден в корне"
+          else
+            echo "❌ index.html не найден в корне"
+            ls -la /var/www/expa-ai.ru/
+          fi
+          
+          # Установить правильные права доступа
+          chown -R www-data:www-data /var/www/expa-ai.ru
+          chmod -R 755 /var/www/expa-ai.ru
+          
+
+          # Перезапустить Nginx
+          systemctl reload nginx
+          
+          # Очистить временные файлы
+          rm -rf /tmp/career-miniapp
+          
+          echo "Deployment completed successfully!"
