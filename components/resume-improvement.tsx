@@ -775,6 +775,20 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
   console.log('📍 Current step:', currentStep)
   console.log('📊 Все состояния:', { currentStep, selectedProfession, uploadedFile, selectedRole, selectedGoal })
 
+  // Функция для правильной навигации назад
+  const handleBack = () => {
+    if (currentStep === "upload") {
+      setCurrentStep("instruction")
+    } else if (currentStep === "processing") {
+      setCurrentStep("upload")
+    } else if (currentStep === "results") {
+      setCurrentStep("upload")
+    } else {
+      // Для шага "instruction" возвращаемся к выбору сценария
+      onBack()
+    }
+  }
+
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentFactIndex((prev) => (prev + 1) % interestingFacts.length)
@@ -1032,7 +1046,7 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
             <Button
               variant="ghost"
               size="icon"
-              onClick={onBack}
+              onClick={handleBack}
               className="text-white hover:bg-white/20"
             >
               <ArrowLeft className="h-6 w-6" />
@@ -1195,7 +1209,8 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
                 Перетащите файл сюда или выберите с устройства
               </p>
               <p className="text-white/60 text-xs mb-4">
-                  Поддерживаются форматы: PDF, DOC, DOCX, TXT
+                  Поддерживаются форматы: PDF, DOC, DOCX, TXT<br/>
+                  Максимальный размер файла: 1 МБ
                 </p>
               <Button 
                 className="bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 border-0 shadow-lg"
@@ -1295,7 +1310,7 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
             <Button
               variant="ghost"
               size="icon"
-              onClick={onBack}
+              onClick={handleBack}
               className="text-white hover:bg-white/20"
             >
               <ArrowLeft className="h-6 w-6" />
