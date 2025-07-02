@@ -71,11 +71,16 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
-          # Stop backend service
-          sudo systemctl stop career-backend
+          # Create backend directory if it doesn't exist
+          sudo mkdir -p /opt/career-backend
           
-          # Create backup
-          sudo cp -r /opt/career-backend /opt/career-backend.backup.$(date +%Y%m%d_%H%M%S)
+          # Stop backend service if it exists
+          sudo systemctl stop career-backend || true
+          
+          # Create backup if directory exists and has content
+          if [ -d "/opt/career-backend" ] && [ "$(ls -A /opt/career-backend)" ]; then
+            sudo cp -r /opt/career-backend /opt/career-backend.backup.$(date +%Y%m%d_%H%M%S)
+          fi
           
           # Clone repository
           cd /tmp
@@ -85,21 +90,44 @@ jobs:
           # Copy backend files
           sudo cp -r career-miniapp/backend/* /opt/career-backend/
           
-          # Activate virtual environment and update dependencies
+          # Create virtual environment if it doesn't exist
           cd /opt/career-backend
-          source venv/bin/activate
+          if [ ! -d "venv" ]; then
+            sudo python3 -m venv venv
+          fi
           
-          # Update pip
-          pip install --upgrade pip
-          
-          # Force reinstall all dependencies to ensure httpx update
-          pip install --force-reinstall -r requirements.txt
+          # Activate virtual environment and update dependencies
+          sudo venv/bin/pip install --upgrade pip
+          sudo venv/bin/pip install --force-reinstall -r requirements.txt
           
           # Verify httpx version
-          python -c "import httpx; print(f'httpx version: {httpx.__version__}')"
+          sudo venv/bin/python -c "import httpx; print(f'httpx version: {httpx.__version__}')"
+          
+          # Create systemd service if it doesn't exist
+          if [ ! -f "/etc/systemd/system/career-backend.service" ]; then
+            sudo tee /etc/systemd/system/career-backend.service > /dev/null <<EOF
+[Unit]
+Description=Career Backend API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/career-backend
+Environment=PATH=/opt/career-backend/venv/bin
+ExecStart=/opt/career-backend/venv/bin/python main.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable career-backend
+          fi
           
           # Set proper permissions
-          sudo chown -R career-user:career-user /opt/career-backend
+          sudo chown -R www-data:www-data /opt/career-backend
           
           # Start backend service
           sudo systemctl start career-backend
