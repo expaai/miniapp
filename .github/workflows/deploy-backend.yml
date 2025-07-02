@@ -52,18 +52,18 @@ jobs:
           pip show httpx | grep Version
           
           # Перезапускаем сервис
-          sudo systemctl restart career-backend
+          systemctl restart career-backend
           echo "✅ Сервис перезапущен"
           
           # Ждем несколько секунд для запуска
           sleep 5
           
           # Проверяем статус сервиса
-          if sudo systemctl is-active --quiet career-backend; then
+          if systemctl is-active --quiet career-backend; then
             echo "✅ Сервис работает"
           else
             echo "❌ Сервис не запустился"
-            sudo systemctl status career-backend
+            systemctl status career-backend
             exit 1
           fi
           
