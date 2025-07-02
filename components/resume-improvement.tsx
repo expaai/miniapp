@@ -1178,7 +1178,7 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setCurrentStep("instruction")}
+              onClick={handleBack}
               className="text-white hover:bg-white/20"
             >
               <ArrowLeft className="h-6 w-6" />
@@ -1442,7 +1442,7 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
             <Button
               variant="outline"
               className="w-full border-white/40 text-gray-800 hover:bg-white/20 hover:text-white backdrop-blur-sm"
-              onClick={() => setCurrentStep("instruction")}
+              onClick={handleBack}
             >
               Анализировать другое резюме
             </Button>

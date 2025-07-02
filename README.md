@@ -134,17 +134,16 @@ Content-Type: application/json
 
 ```
 career-miniapp/
-├── frontend/
-│   ├── app/                 # Next.js app directory
-│   ├── components/          # React компоненты
-│   ├── hooks/              # Custom hooks (включая API)
-│   ├── career-app.tsx      # Главный компонент
-│   └── ...
+├── app/                    # Next.js app directory
+├── components/             # React компоненты
+├── hooks/                  # Custom hooks (включая API)
+├── career-app.tsx          # Главный компонент
 ├── backend/
 │   ├── main.py             # FastAPI приложение
+│   ├── models.py           # SQLAlchemy модели
+│   ├── database.py         # Настройка БД
 │   ├── requirements.txt    # Python зависимости
-│   ├── .env.example       # Пример конфигурации
-│   └── README.md          # Документация бэкенда
+│   └── .env.example       # Пример конфигурации
 └── README.md              # Этот файл
 ```
 
@@ -164,26 +163,31 @@ npm start
 ### Облачный деплой
 
 **Рекомендуемые платформы:**
-- **Бэкенд**: Railway.app, Render.com, DigitalOcean
+- **Бэкенд**: VPS, Railway.app, Render.com, DigitalOcean
 - **Фронтенд**: Vercel, Netlify, Railway.app
 
-1. **Деплой backend на Heroku:**
+**Подробные инструкции по деплою на VPS:** см. `backend/DEPLOY_VPS.md`
+
+1. **Деплой backend на VPS:**
 ```bash
-cd backend
-# Следуйте инструкциям в DEPLOY_HEROKU.md
-# Или используйте кнопку Deploy to Heroku
+# Подключитесь к серверу
+ssh user@your-server-ip
+
+# Клонируйте проект и настройте окружение
+git clone https://github.com/your-username/career-miniapp.git
+cd career-miniapp/backend
+
+# Создайте .env файл с переменными
+echo "OPENAI_API_KEY=your_key" > .env
+echo "ALLOWED_ORIGINS=https://your-domain.com,https://t.me" >> .env
 ```
 
 2. **Обновите .env.local в фронтенде:**
 ```env
-NEXT_PUBLIC_API_URL=https://your-heroku-app.herokuapp.com
-NEXT_PUBLIC_APP_URL=https://expaai.github.io/miniapp/
-```
-
-3. **Настройте переменные на Heroku:**
-```bash
-heroku config:set OPENAI_API_KEY=your_key
-heroku config:set ALLOWED_ORIGINS="https://expaai.github.io,https://t.me"
+NEXT_PUBLIC_API_URL=http://your-server-ip:8000
+# Или с доменом:
+# NEXT_PUBLIC_API_URL=https://your-domain.com
+NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```
 
 ## 🔐 Безопасность

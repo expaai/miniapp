@@ -1,13 +1,22 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+import uuid
+import json
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
+
+# Импорты для работы с базой данных
+from database import get_db, engine, Base
+from models import User, Session as DBSession, Resume, Analysis
+from encryption import anonymize_for_ai, encrypt_resume_for_storage, decrypt_resume_from_storage, data_protector
 from datetime import datetime
 import PyPDF2
 from docx import Document
@@ -16,6 +25,9 @@ import pdfplumber
 import fitz  # PyMuPDF
 
 app = FastAPI(title="Career Mini App API", version="1.0.0")
+
+# Создаем таблицы в базе данных
+Base.metadata.create_all(bind=engine)  # Включено после настройки PostgreSQL на Beget
 
 # CORS middleware для фронтенда
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,https://expaai.github.io").split(",")
@@ -106,6 +118,29 @@ class ResumeAnalysisAIResponse(BaseModel):
     analysis: str
     success: bool
     message: str
+
+# Новые модели для управления ролями и состоянием
+class UserRoleRequest(BaseModel):
+    user_id: str
+    user_role: str  # 'student' | 'professional'
+    timestamp: Optional[datetime] = None
+
+class UserRoleResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: str
+
+class SessionStateRequest(BaseModel):
+    user_id: str
+
+class SessionStateResponse(BaseModel):
+    success: bool
+    has_role: bool
+    user_role: Optional[str] = None
+    selected_profession: Optional[str] = None
+    career_goal: Optional[str] = None
+    session_id: Optional[str] = None
+    current_screen: str  # 'role', 'goals', 'profession', 'advice', 'resume', 'main'
 
 # Функции для обработки файлов
 def extract_text_from_pdf(file_content: bytes) -> str:
@@ -355,16 +390,51 @@ async def process_career_test(request: CareerTestRequest):
         raise HTTPException(status_code=500, detail=f"Ошибка обработки теста: {str(e)}")
 
 @app.post("/log-profession-selection", response_model=ProfessionSelectionResponse)
-async def log_profession_selection(request: ProfessionSelectionRequest):
+async def log_profession_selection(request: ProfessionSelectionRequest, db: Session = Depends(get_db)):
     """
     Логирование выбора профессии пользователем
     """
     try:
-        # Генерируем уникальный session_id
-        import uuid
-        session_id = str(uuid.uuid4())
+        # Создаем или получаем пользователя
+        user = db.query(User).filter(User.telegram_id == request.user_id).first()
+        if not user:
+            user = User(
+                telegram_id=request.user_id,
+                username=f"user_{request.user_id}",
+                data_processing_consent=True
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
         
-        # Логируем данные (в будущем сохранять в БД)
+        # Находим последнюю сессию пользователя или создаем новую
+        db_session = db.query(DBSession).filter(
+            DBSession.user_id == user.id
+        ).order_by(DBSession.created_at.desc()).first()
+        
+        if db_session:
+            # Обновляем существующую сессию
+            db_session.selected_profession = request.selected_profession
+            if request.user_role:
+                db_session.career_stage = request.user_role
+            if request.user_goal:
+                db_session.career_goal = request.user_goal
+            session_id = db_session.session_id
+        else:
+            # Создаем новую сессию
+            session_id = str(uuid.uuid4())
+            db_session = DBSession(
+                session_id=session_id,
+                user_id=user.id,
+                selected_profession=request.selected_profession,
+                career_stage=request.user_role,
+                career_goal=request.user_goal
+            )
+            db.add(db_session)
+        
+        db.commit()
+        
+        # Логируем данные для отладки
         log_data = {
             "session_id": session_id,
             "user_id": request.user_id,
@@ -384,6 +454,7 @@ async def log_profession_selection(request: ProfessionSelectionRequest):
         )
         
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Ошибка логирования выбора профессии: {str(e)}")
 
 @app.post("/get-job-matches", response_model=JobMatchingResponse)
@@ -487,7 +558,7 @@ async def get_job_matches(request: JobMatchingRequest):
         raise HTTPException(status_code=500, detail=f"Ошибка получения вакансий: {str(e)}")
 
 @app.post("/upload-resume", response_model=ResumeUploadResponse)
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(file: UploadFile = File(...), session_id: str = None, db: Session = Depends(get_db)):
     """
     Загрузка и извлечение текста из файла резюме с улучшенной диагностикой
     """
@@ -565,6 +636,30 @@ async def upload_resume(file: UploadFile = File(...)):
             preview = extracted_text[:200] + "..." if len(extracted_text) > 200 else extracted_text
             print(f"📖 Превью текста: {preview}")
             
+            # Сохраняем резюме в базу данных
+            try:
+                if session_id:
+                    # Находим сессию
+                    db_session = db.query(DBSession).filter(DBSession.session_id == session_id).first()
+                    if db_session:
+                        # 🔒 Шифруем текст резюме перед сохранением
+                        encrypted_text = encrypt_resume_for_storage(extracted_text)
+                        
+                        # Создаем запись о резюме
+                        resume = Resume(
+                            session_id=db_session.id,
+                            filename=file.filename,
+                            file_type=file_type,
+                            file_size=actual_size,
+                            extracted_text=encrypted_text  # Сохраняем зашифрованный текст
+                        )
+                        db.add(resume)
+                        db.commit()
+                        print(f"💾 Резюме сохранено в базу данных для сессии {session_id}")
+            except Exception as db_error:
+                print(f"⚠️ Ошибка сохранения в БД: {str(db_error)}")
+                # Не прерываем выполнение, если БД недоступна
+            
             return ResumeUploadResponse(
                 success=True,
                 extracted_text=extracted_text,
@@ -588,7 +683,7 @@ async def upload_resume(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Ошибка обработки файла: {str(e)}")
 
 @app.post("/analyze-resume-ai", response_model=ResumeAnalysisAIResponse)
-async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
+async def analyze_resume_ai(request: ResumeAnalysisAIRequest, db: Session = Depends(get_db)):
     """
     Анализ резюме с помощью OpenAI API
     """
@@ -602,11 +697,18 @@ async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
                 message="OpenAI API ключ не настроен на сервере"
             )
         
-        # Ограничиваем длину текста резюме
+        # 🔒 ЗАЩИТА ПЕРСОНАЛЬНЫХ ДАННЫХ
+        # Анонимизируем персональные данные перед отправкой в OpenAI
+        print(f"🔒 Анонимизация персональных данных...")
+        anonymized_text, encrypted_replacements = anonymize_for_ai(request.resume_text)
+        
+        # Ограничиваем длину анонимизированного текста
         max_resume_length = 6000
-        truncated_resume_text = request.resume_text[:max_resume_length]
-        if len(request.resume_text) > max_resume_length:
+        truncated_resume_text = anonymized_text[:max_resume_length]
+        if len(anonymized_text) > max_resume_length:
             truncated_resume_text += "\n\n[Текст резюме обрезан для анализа]"
+        
+        print(f"✅ Персональные данные защищены. Длина анонимизированного текста: {len(truncated_resume_text)} символов")
         
         # Формируем промпт
         prompt = f"""Ты HR-специалист. Проанализируй резюме на позицию "{request.profession}"{f' (вакансия: {request.job_url})' if request.job_url else ''}.
@@ -633,7 +735,12 @@ async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
         # Настраиваем OpenAI клиент с детальной обработкой ошибок
         try:
             print(f"🔑 Инициализация OpenAI клиента...")
-            client = OpenAI(api_key=api_key)
+            # Инициализируем клиент только с необходимыми параметрами
+            client = OpenAI(
+                api_key=api_key,
+                timeout=30.0,  # Таймаут 30 секунд
+                max_retries=2   # Максимум 2 попытки
+            )
             print(f"✅ OpenAI клиент успешно инициализирован")
         except Exception as client_error:
             print(f"❌ Ошибка инициализации OpenAI клиента: {str(client_error)}")
@@ -673,6 +780,30 @@ async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
             .replace('`', '')\
             .strip()
         
+        # Сохраняем результат анализа в базу данных
+        try:
+            if hasattr(request, 'session_id') and request.session_id:
+                # Находим сессию
+                db_session = db.query(DBSession).filter(DBSession.session_id == request.session_id).first()
+                if db_session:
+                    # Находим резюме для этой сессии
+                    resume = db.query(Resume).filter(Resume.session_id == db_session.id).first()
+                    if resume:
+                        # Создаем запись об анализе
+                        analysis_record = Analysis(
+                            resume_id=resume.id,
+                            analysis_result=clean_analysis,
+                            model_used="gpt-4o-mini",
+                            tokens_used=response.usage.total_tokens if hasattr(response, 'usage') else None,
+                            processing_time_seconds=None  # Можно добавить замер времени
+                        )
+                        db.add(analysis_record)
+                        db.commit()
+                        print(f"💾 Результат анализа сохранен в базу данных")
+        except Exception as db_error:
+            print(f"⚠️ Ошибка сохранения анализа в БД: {str(db_error)}")
+            # Не прерываем выполнение, если БД недоступна
+        
         return ResumeAnalysisAIResponse(
             analysis=clean_analysis,
             success=True,
@@ -685,6 +816,223 @@ async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
             success=False,
             message=f"Ошибка при анализе резюме: {str(e)}"
         )
+
+@app.post("/save-user-role", response_model=UserRoleResponse)
+async def save_user_role(request: UserRoleRequest, db: Session = Depends(get_db)):
+    """
+    Сохранение роли пользователя (студент/профессионал)
+    """
+    try:
+        # Генерируем уникальный session_id
+        session_id = str(uuid.uuid4())
+        
+        # Создаем или получаем пользователя
+        user = db.query(User).filter(User.telegram_id == request.user_id).first()
+        if not user:
+            user = User(
+                telegram_id=request.user_id,
+                username=f"user_{request.user_id}",
+                data_processing_consent=True
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Создаем новую сессию с ролью
+        db_session = DBSession(
+            session_id=session_id,
+            user_id=user.id,
+            career_stage=request.user_role
+        )
+        db.add(db_session)
+        db.commit()
+        
+        # Логируем данные
+        log_data = {
+            "session_id": session_id,
+            "user_id": request.user_id,
+            "user_role": request.user_role,
+            "timestamp": request.timestamp or datetime.now(),
+            "action": "user_role_selection"
+        }
+        
+        print(f"[USER_ROLE_SELECTION] {log_data}")
+        
+        return UserRoleResponse(
+            success=True,
+            message="Роль пользователя успешно сохранена",
+            session_id=session_id
+        )
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка сохранения роли пользователя: {str(e)}")
+
+@app.post("/save-user-goal", response_model=UserRoleResponse)
+async def save_user_goal(request: dict, db: Session = Depends(get_db)):
+    """
+    Сохранение цели пользователя в существующую сессию
+    """
+    try:
+        user_id = request.get('user_id')
+        user_goal = request.get('user_goal')
+        
+        if not user_id or not user_goal:
+            raise HTTPException(status_code=400, detail="user_id и user_goal обязательны")
+        
+        # Находим пользователя
+        user = db.query(User).filter(User.telegram_id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        
+        # Находим последнюю сессию пользователя
+        db_session = db.query(DBSession).filter(
+            DBSession.user_id == user.id
+        ).order_by(DBSession.created_at.desc()).first()
+        
+        if not db_session:
+            raise HTTPException(status_code=404, detail="Сессия не найдена")
+        
+        # Обновляем цель в сессии
+        db_session.career_goal = user_goal
+        db.commit()
+        
+        # Логируем данные
+        log_data = {
+            "session_id": db_session.session_id,
+            "user_id": user_id,
+            "user_goal": user_goal,
+            "timestamp": datetime.now(),
+            "action": "user_goal_selection"
+        }
+        
+        print(f"[USER_GOAL_SELECTION] {log_data}")
+        
+        return UserRoleResponse(
+            success=True,
+            message="Цель пользователя успешно сохранена",
+            session_id=db_session.session_id
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка сохранения цели пользователя: {str(e)}")
+
+@app.post("/get-session-state", response_model=SessionStateResponse)
+async def get_session_state(request: SessionStateRequest, db: Session = Depends(get_db)):
+    """
+    Получение состояния сессии пользователя для восстановления экрана
+    """
+    try:
+        # Находим пользователя
+        user = db.query(User).filter(User.telegram_id == request.user_id).first()
+        if not user:
+            return SessionStateResponse(
+                success=True,
+                has_role=False,
+                current_screen="role"
+            )
+        
+        # Находим последнюю сессию пользователя
+        last_session = db.query(DBSession).filter(
+            DBSession.user_id == user.id
+        ).order_by(DBSession.created_at.desc()).first()
+        
+        if not last_session:
+            return SessionStateResponse(
+                success=True,
+                has_role=False,
+                current_screen="role"
+            )
+        
+        # Определяем текущий экран на основе данных сессии
+        current_screen = "role"
+        if last_session.career_stage:
+            current_screen = "goals"
+            if last_session.career_goal:
+                current_screen = "profession"
+                if last_session.selected_profession:
+                    current_screen = "main"
+        
+        return SessionStateResponse(
+            success=True,
+            has_role=bool(last_session.career_stage),
+            user_role=last_session.career_stage,
+            selected_profession=last_session.selected_profession,
+            career_goal=last_session.career_goal,
+            session_id=last_session.session_id,
+            current_screen=current_screen
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения состояния сессии: {str(e)}")
+
+@app.get("/data-processing-notice")
+async def get_data_processing_notice():
+    """
+    Получение уведомления об обработке персональных данных
+    В соответствии с 152-ФЗ "О персональных данных"
+    """
+    try:
+        notice = data_protector.get_data_processing_notice()
+        return {
+            "success": True,
+            "notice": notice,
+            "compliance": "152-ФЗ О персональных данных",
+            "encryption": "AES-256",
+            "anonymization": "Активна"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения уведомления: {str(e)}")
+
+@app.get("/admin/stats")
+async def get_admin_stats(db: Session = Depends(get_db)):
+    """
+    Получение статистики для администрирования (только для разработки)
+    """
+    try:
+        # Подсчет пользователей
+        total_users = db.query(User).count()
+        users_with_consent = db.query(User).filter(User.data_processing_consent == True).count()
+        
+        # Подсчет сессий
+        total_sessions = db.query(DBSession).count()
+        sessions_by_profession = db.query(
+            DBSession.selected_profession, 
+            db.func.count(DBSession.id)
+        ).group_by(DBSession.selected_profession).all()
+        
+        # Подсчет резюме
+        total_resumes = db.query(Resume).count()
+        resumes_by_type = db.query(
+            Resume.file_type,
+            db.func.count(Resume.id)
+        ).group_by(Resume.file_type).all()
+        
+        # Подсчет анализов
+        total_analyses = db.query(Analysis).count()
+        
+        return {
+            "users": {
+                "total": total_users,
+                "with_consent": users_with_consent
+            },
+            "sessions": {
+                "total": total_sessions,
+                "by_profession": dict(sessions_by_profession)
+            },
+            "resumes": {
+                "total": total_resumes,
+                "by_type": dict(resumes_by_type)
+            },
+            "analyses": {
+                "total": total_analyses
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка получения статистики: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

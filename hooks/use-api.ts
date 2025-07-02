@@ -69,6 +69,38 @@ export interface JobMatchingResponse {
   session_id: string;
 }
 
+// Новые интерфейсы для управления ролями и состоянием
+export interface UserRoleRequest {
+  user_id: string;
+  user_role: string; // 'student' | 'professional'
+  timestamp?: string;
+}
+
+export interface UserRoleResponse {
+  success: boolean;
+  message: string;
+  session_id: string;
+}
+
+export interface SessionStateRequest {
+  user_id: string;
+}
+
+export interface SessionStateResponse {
+  success: boolean;
+  has_role: boolean;
+  user_role?: string;
+  selected_profession?: string;
+  career_goal?: string;
+  session_id?: string;
+  current_screen: string; // 'role', 'goals', 'profession', 'advice', 'resume', 'main'
+}
+
+export interface UserGoalRequest {
+  user_id: string;
+  user_goal: string;
+}
+
 // Конфигурация API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.expa-ai.ru';
 
@@ -219,6 +251,69 @@ export const useAPI = () => {
     }
   };
 
+  // Сохранение роли пользователя
+  const saveUserRole = async (request: UserRoleRequest): Promise<UserRoleResponse | null> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiRequest<UserRoleResponse>('/save-user-role', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка сохранения роли пользователя';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Сохранение цели пользователя
+  const saveUserGoal = async (request: UserGoalRequest): Promise<UserRoleResponse | null> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiRequest<UserRoleResponse>('/save-user-goal', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка сохранения цели пользователя';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Получение состояния сессии
+  const getSessionState = async (request: SessionStateRequest): Promise<SessionStateResponse | null> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiRequest<SessionStateResponse>('/get-session-state', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+      
+      return response;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка получения состояния сессии';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     loading,
     error,
@@ -228,6 +323,9 @@ export const useAPI = () => {
     checkAPIStatus,
     logProfessionSelection,
     getJobMatches,
+    saveUserRole,
+    saveUserGoal,
+    getSessionState,
     clearError: () => setError(null),
   };
 };

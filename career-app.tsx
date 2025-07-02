@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTelegram } from "@/hooks/use-telegram"
-import { useAPI, CareerAdviceResponse, ProfessionSelectionRequest, JobMatchingRequest } from "@/hooks/use-api"
+import { useAPI, CareerAdviceResponse, ProfessionSelectionRequest, JobMatchingRequest, UserRoleRequest, SessionStateRequest } from "@/hooks/use-api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -58,25 +58,153 @@ export default function CareerMiniApp() {
   const [selectedGoal, setSelectedGoal] = useState<Goal>("")
   const [selectedProfession, setSelectedProfession] = useState<string>("")
   const [careerAdvice, setCareerAdvice] = useState<CareerAdviceResponse | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
   
   // Логирование для отладки
   console.log('🔄 РЕНДЕР КОМПОНЕНТА! currentScreen:', currentScreen, 'selectedGoal:', selectedGoal)
   const { user, isReady, showMainButton, hideMainButton, showBackButton, hideBackButton, hapticFeedback } = useTelegram()
-  const { getCareerAdvice, loading, error, clearError, logProfessionSelection, getJobMatches } = useAPI()
+  const { getCareerAdvice, loading, error, clearError, logProfessionSelection, getJobMatches, saveUserRole, saveUserGoal, getSessionState } = useAPI()
   const [sessionId, setSessionId] = useState<string>("")
   
   // Получаем имя пользователя из Telegram или используем по умолчанию
   const userName = user?.first_name || "Пользователь"
 
-  const handleRoleSelect = (role: Role) => {
+  // Функция для сохранения состояния в localStorage
+  const saveStateToLocalStorage = () => {
+    const state = {
+      selectedRole,
+      selectedGoal,
+      selectedProfession,
+      sessionId,
+      currentScreen
+    }
+    localStorage.setItem('careerAppState', JSON.stringify(state))
+  }
+
+  // Функция для загрузки состояния из localStorage
+  const loadStateFromLocalStorage = () => {
+    try {
+      const savedState = localStorage.getItem('careerAppState')
+      if (savedState) {
+        const state = JSON.parse(savedState)
+        return state
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке состояния из localStorage:', error)
+    }
+    return null
+  }
+
+  // Инициализация состояния при загрузке компонента
+  useEffect(() => {
+    if (!isReady || !user?.id || isInitialized) return
+
+    const initializeState = async () => {
+      try {
+        // Сначала пытаемся получить состояние с сервера
+        const sessionStateRequest: SessionStateRequest = {
+          user_id: user.id.toString()
+        }
+        
+        const sessionState = await getSessionState(sessionStateRequest)
+        
+        if (sessionState && sessionState.current_screen !== 'role') {
+          // Восстанавливаем состояние с сервера
+          if (sessionState.user_role) {
+            setSelectedRole(sessionState.user_role as Role)
+          }
+          if (sessionState.career_goal) {
+            setSelectedGoal(sessionState.career_goal)
+          }
+          if (sessionState.selected_profession) {
+            setSelectedProfession(sessionState.selected_profession)
+          }
+          if (sessionState.session_id) {
+            setSessionId(sessionState.session_id)
+          }
+          setCurrentScreen(sessionState.current_screen as any)
+        } else {
+          // Если нет данных на сервере, пытаемся загрузить из localStorage
+          const localState = loadStateFromLocalStorage()
+          if (localState) {
+            if (localState.selectedRole) setSelectedRole(localState.selectedRole)
+            if (localState.selectedGoal) setSelectedGoal(localState.selectedGoal)
+            if (localState.selectedProfession) setSelectedProfession(localState.selectedProfession)
+            if (localState.sessionId) setSessionId(localState.sessionId)
+            if (localState.currentScreen && localState.currentScreen !== 'role') {
+              setCurrentScreen(localState.currentScreen)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при инициализации состояния:', error)
+        // В случае ошибки пытаемся загрузить из localStorage
+        const localState = loadStateFromLocalStorage()
+        if (localState) {
+          if (localState.selectedRole) setSelectedRole(localState.selectedRole)
+          if (localState.selectedGoal) setSelectedGoal(localState.selectedGoal)
+          if (localState.selectedProfession) setSelectedProfession(localState.selectedProfession)
+          if (localState.sessionId) setSessionId(localState.sessionId)
+          if (localState.currentScreen && localState.currentScreen !== 'role') {
+            setCurrentScreen(localState.currentScreen)
+          }
+        }
+      } finally {
+        setIsInitialized(true)
+      }
+    }
+
+    initializeState()
+  }, [isReady, user?.id, isInitialized, getSessionState])
+
+  // Сохраняем состояние в localStorage при изменениях
+  useEffect(() => {
+    if (isInitialized) {
+      saveStateToLocalStorage()
+    }
+  }, [selectedRole, selectedGoal, selectedProfession, sessionId, currentScreen, isInitialized])
+
+  const handleRoleSelect = async (role: Role) => {
     hapticFeedback.impact('light')
     setSelectedRole(role)
+    
+    // Сохраняем роль пользователя на сервер
+    if (user?.id) {
+      try {
+        const userRoleRequest: UserRoleRequest = {
+          user_id: user.id.toString(),
+          user_role: role
+        }
+        
+        const response = await saveUserRole(userRoleRequest)
+        if (response?.session_id) {
+          setSessionId(response.session_id)
+        }
+      } catch (error) {
+        console.error('Ошибка при сохранении роли пользователя:', error)
+      }
+    }
+    
     setCurrentScreen("goals")
   }
 
-  const handleGoalSelect = (goal: Goal) => {
+  const handleGoalSelect = async (goal: Goal) => {
     hapticFeedback.impact('light')
     setSelectedGoal(goal)
+    
+    // Сохраняем цель пользователя на сервер
+    if (user?.id) {
+      try {
+        const userGoalRequest = {
+          user_id: user.id.toString(),
+          user_goal: goal
+        }
+        
+        await saveUserGoal(userGoalRequest)
+      } catch (error) {
+        console.error('Ошибка при сохранении цели пользователя:', error)
+      }
+    }
   }
 
   const handleContinue = () => {
@@ -629,6 +757,21 @@ export default function CareerMiniApp() {
         selectedProfession={selectedProfession}
         sessionId={sessionId}
       />
+    )
+  }
+
+  // Показываем загрузку пока состояние не инициализировано
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-amber-500/25">
+            <Loader2 className="w-8 h-8 text-white animate-spin" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Загрузка...</h2>
+          <p className="text-gray-300">Восстанавливаем ваше состояние</p>
+        </div>
+      </div>
     )
   }
 
