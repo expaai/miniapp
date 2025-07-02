@@ -44,8 +44,8 @@ jobs:
           # Активируем виртуальное окружение
           source venv/bin/activate
           
-          # Обновляем зависимости
-          pip install -r requirements.txt
+          # Обновляем зависимости с принудительной переустановкой
+          pip install --no-cache-dir --force-reinstall -r requirements.txt
           echo "✅ Зависимости обновлены"
           
           # Проверяем, что httpx версия правильная
