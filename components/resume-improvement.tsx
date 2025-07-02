@@ -787,7 +787,22 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      setUploadedFile(file)
+      // Проверяем размер файла (1MB = 1024 * 1024 байт)
+      const maxSize = 1 * 1024 * 1024 // 1MB
+      if (file.size > maxSize) {
+        alert(`Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)} МБ). Максимальный размер: 1 МБ`)
+        return
+      }
+      
+      // Проверяем тип файла
+      if (file.type === 'application/pdf' || 
+            file.type === 'application/msword' || 
+            file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            file.type === 'text/plain') {
+        setUploadedFile(file)
+      } else {
+        alert('Поддерживаются только файлы: PDF, DOCX, DOC, TXT')
+      }
     }
   }
 
@@ -800,11 +815,21 @@ export default function ResumeImprovement({ onBack, selectedRole, selectedGoal, 
     const files = event.dataTransfer.files
     if (files.length > 0) {
       const file = files[0]
+      
+      // Проверяем размер файла (1MB = 1024 * 1024 байт)
+      const maxSize = 1 * 1024 * 1024 // 1MB
+      if (file.size > maxSize) {
+        alert(`Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)} МБ). Максимальный размер: 1 МБ`)
+        return
+      }
+      
       if (file.type === 'application/pdf' || 
             file.type === 'application/msword' || 
             file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
             file.type === 'text/plain') {
         setUploadedFile(file)
+      } else {
+        alert('Поддерживаются только файлы: PDF, DOCX, DOC, TXT')
       }
     }
   }

@@ -533,10 +533,10 @@ async def upload_resume(file: UploadFile = File(...)):
         if actual_size == 0:
             raise HTTPException(status_code=400, detail="Файл пустой")
         
-        # Ограничиваем размер файла (10MB)
-        max_size = 10 * 1024 * 1024  # 10MB
+        # Ограничиваем размер файла (1MB)
+        max_size = 1 * 1024 * 1024  # 1MB
         if actual_size > max_size:
-            raise HTTPException(status_code=400, detail=f"Файл слишком большой ({actual_size} байт, максимум 10MB)")
+            raise HTTPException(status_code=400, detail=f"Файл слишком большой ({actual_size} байт, максимум 1MB)")
         
         # Извлекаем текст в зависимости от типа файла
         print(f"🔍 Начинаем извлечение текста из {file_type.upper()} файла...")
@@ -630,18 +630,38 @@ async def analyze_resume_ai(request: ResumeAnalysisAIRequest):
 Резюме:
 {truncated_resume_text}"""
         
-        # Настраиваем OpenAI клиент
-        client = OpenAI(api_key=api_key)
+        # Настраиваем OpenAI клиент с детальной обработкой ошибок
+        try:
+            print(f"🔑 Инициализация OpenAI клиента...")
+            client = OpenAI(api_key=api_key)
+            print(f"✅ OpenAI клиент успешно инициализирован")
+        except Exception as client_error:
+            print(f"❌ Ошибка инициализации OpenAI клиента: {str(client_error)}")
+            return ResumeAnalysisAIResponse(
+                analysis="",
+                success=False,
+                message=f"Ошибка инициализации OpenAI клиента: {str(client_error)}"
+            )
         
         # Делаем запрос к OpenAI
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=4000,
-            temperature=0.7
-        )
+        try:
+            print(f"🤖 Отправка запроса к OpenAI API...")
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=4000,
+                temperature=0.7
+            )
+            print(f"✅ Получен ответ от OpenAI API")
+        except Exception as api_error:
+            print(f"❌ Ошибка API запроса: {str(api_error)}")
+            return ResumeAnalysisAIResponse(
+                analysis="",
+                success=False,
+                message=f"Ошибка API запроса: {str(api_error)}"
+            )
         
         analysis = response.choices[0].message.content
         
