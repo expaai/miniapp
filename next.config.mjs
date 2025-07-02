@@ -12,6 +12,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // Оптимизация для Telegram Mini App
+  output: 'export',
   trailingSlash: true,
   distDir: 'dist',
   // Переменные окружения

@@ -54,37 +54,22 @@ jobs:
           npm ci --legacy-peer-deps
           npm run build
           
-          # Скопировать собранные файлы
+          # Скопировать собранные файлы из dist в корень сайта
           cp -r dist/* /var/www/expa-ai.ru/
+          
+          # Убедиться что index.html в корне
+          if [ -f "/var/www/expa-ai.ru/index.html" ]; then
+            echo "✅ index.html найден в корне"
+          else
+            echo "❌ index.html не найден в корне"
+            ls -la /var/www/expa-ai.ru/
+          fi
           
           # Установить правильные права доступа
           chown -R www-data:www-data /var/www/expa-ai.ru
           chmod -R 755 /var/www/expa-ai.ru
           
-          # Деплой backend
-          echo "🔧 Деплой backend..."
-          cd backend
-          
-          # Остановить существующий backend
-          docker-compose down || true
-          
-          # Обновить зависимости Python
-          docker-compose build --no-cache
-          
-          # Запустить backend
-          docker-compose up -d
-          
-          # Проверить статус backend
-          sleep 10
-          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-            echo "✅ Backend успешно запущен!"
-          else
-            echo "❌ Ошибка запуска backend"
-            docker-compose logs career-backend
-          fi
-          
-          cd ..
-          
+
           # Перезапустить Nginx
           systemctl reload nginx
           

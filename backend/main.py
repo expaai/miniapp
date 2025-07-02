@@ -10,8 +10,9 @@ from sqlalchemy import create_engine
 import uuid
 import json
 
-# Загружаем переменные окружения из .env файла
-load_dotenv()
+# Загружаем переменные окружения с автоматическим определением среды
+from load_env import load_environment
+load_environment()
 
 # Импорты для работы с базой данных
 from database import get_db, engine, Base
@@ -736,11 +737,28 @@ async def analyze_resume_ai(request: ResumeAnalysisAIRequest, db: Session = Depe
         try:
             print(f"🔑 Инициализация OpenAI клиента...")
             # Инициализируем клиент только с необходимыми параметрами
-            client = OpenAI(
-                api_key=api_key,
-                timeout=30.0,  # Таймаут 30 секунд
-                max_retries=2   # Максимум 2 попытки
-            )
+            # Создаем параметры для OpenAI клиента, исключая proxies
+            client_params = {
+                "api_key": api_key,
+                "timeout": 30.0,  # Таймаут 30 секунд
+                "max_retries": 2   # Максимум 2 попытки
+            }
+            
+            # Убираем любые proxy-связанные параметры из окружения
+            # для предотвращения автоматической передачи в httpx
+            original_env = {}
+            proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+            for var in proxy_vars:
+                if var in os.environ:
+                    original_env[var] = os.environ[var]
+                    del os.environ[var]
+            
+            try:
+                client = OpenAI(**client_params)
+            finally:
+                # Восстанавливаем переменные окружения
+                for var, value in original_env.items():
+                    os.environ[var] = value
             print(f"✅ OpenAI клиент успешно инициализирован")
         except Exception as client_error:
             print(f"❌ Ошибка инициализации OpenAI клиента: {str(client_error)}")
@@ -1033,6 +1051,8 @@ async def get_admin_stats(db: Session = Depends(get_db)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка получения статистики: {str(e)}")
+
+
 
 if __name__ == "__main__":
     import uvicorn

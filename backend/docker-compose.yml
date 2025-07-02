@@ -7,9 +7,9 @@ services:
       - "8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ENVIRONMENT=production
+      - ENVIRONMENT=development  # Для Docker используем development
     volumes:
-      - ./uploads:/tmp/uploads
+      - uploads:/tmp/uploads
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
