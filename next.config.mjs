@@ -12,7 +12,6 @@ const nextConfig = {
     unoptimized: true,
   },
   // Оптимизация для Telegram Mini App
-  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   trailingSlash: true,
   distDir: 'dist',
   // Переменные окружения

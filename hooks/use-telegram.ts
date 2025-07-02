@@ -94,23 +94,30 @@ export const useTelegram = () => {
   const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-      const tg = window.Telegram.WebApp
-      setWebApp(tg)
-      setUser(tg.initDataUnsafe?.user || null)
-      
-      // Инициализация приложения
-      tg.ready()
-      tg.expand()
-      
-      // Скрываем MainButton сразу при инициализации
-      tg.MainButton.hide()
-      
-      // Настройка темы
-      tg.setHeaderColor('#1e293b')
-      tg.setBackgroundColor('#f8fafc')
-      
-      setIsReady(true)
+    if (typeof window !== 'undefined') {
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp
+        setWebApp(tg)
+        setUser(tg.initDataUnsafe?.user || null)
+        
+        // Инициализация приложения
+        tg.ready()
+        tg.expand()
+        
+        // Скрываем MainButton сразу при инициализации
+        tg.MainButton.hide()
+        
+        // Настройка темы
+        tg.setHeaderColor('#1e293b')
+        tg.setBackgroundColor('#f8fafc')
+        
+        setIsReady(true)
+      } else {
+        // Fallback для обычного браузера (не Telegram)
+        console.log('Telegram WebApp API недоступен, используем fallback')
+        setUser({ id: 12345, first_name: 'Тестовый пользователь' })
+        setIsReady(true)
+      }
     }
   }, [])
 
@@ -143,13 +150,19 @@ export const useTelegram = () => {
 
   const hapticFeedback = {
     impact: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'medium') => {
-      webApp?.HapticFeedback.impactOccurred(style)
+      if (webApp?.HapticFeedback) {
+        webApp.HapticFeedback.impactOccurred(style)
+      }
     },
     notification: (type: 'error' | 'success' | 'warning') => {
-      webApp?.HapticFeedback.notificationOccurred(type)
+      if (webApp?.HapticFeedback) {
+        webApp.HapticFeedback.notificationOccurred(type)
+      }
     },
     selection: () => {
-      webApp?.HapticFeedback.selectionChanged()
+      if (webApp?.HapticFeedback) {
+        webApp.HapticFeedback.selectionChanged()
+      }
     }
   }
 
