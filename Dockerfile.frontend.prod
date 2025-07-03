@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Устанавливаем зависимости
-RUN npm ci --only=production
+RUN npm ci
 
 # Копируем исходный код
 COPY . .
@@ -23,10 +23,8 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Копируем собранное приложение
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Копируем собранное статическое приложение
+COPY --from=builder /app/dist ./dist
 
 # Меняем владельца файлов
 RUN chown -R nextjs:nodejs /app
@@ -38,4 +36,6 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-CMD ["node", "server.js"]
+# Используем простой HTTP сервер для статических файлов
+RUN npm install -g serve
+CMD ["serve", "-s", "dist", "-l", "3000"]

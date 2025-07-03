@@ -6,7 +6,7 @@ import { useTelegram } from "@/hooks/use-telegram"
 import { useAPI, CareerAdviceResponse, ProfessionSelectionRequest, JobMatchingRequest, UserRoleRequest, SessionStateRequest } from "@/hooks/use-api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "./components/ui/avatar"
 import { Home, TrendingUp, User, ChevronRight, Star, Crown, Zap, Target, Loader2 } from "lucide-react"
 import ResumeImprovement from "@/components/resume-improvement"
 
