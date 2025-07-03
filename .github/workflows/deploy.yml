@@ -52,6 +52,7 @@ jobs:
           POSTGRES_PORT=5432
           DATABASE_URL=postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/career_miniapp
           ENVIRONMENT=production
+          NEXT_PUBLIC_API_URL=https://api.expa-ai.ru
           EOF
           
           # Build and start containers

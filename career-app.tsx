@@ -361,7 +361,7 @@ export default function CareerMiniApp() {
                 <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10"></div>
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-2">Студент</h3>
+                    <h3 className="text-xl font-bold text-white mb-2">Студент 🎓</h3>
                     <p className="text-emerald-100">Начинаю карьерный путь</p>
                   </div>
                   <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
