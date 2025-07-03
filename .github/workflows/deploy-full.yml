@@ -1,9 +1,9 @@
 name: Deploy Full Stack to VPS
 
 on:
-  workflow_dispatch:  # Временно отключаем автозапуск, только ручной
-  # push:
-  #   branches: [ main ]
+  workflow_dispatch:  # Ручной запуск
+  push:
+    branches: [ main ]
 
 jobs:
   deploy-frontend:

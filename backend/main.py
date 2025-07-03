@@ -43,7 +43,11 @@ app.add_middleware(
 # Health check endpoint для мониторинга
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+    return {
+        "status": "healthy", 
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.1"
+    }
 
 # Модели данных
 class CareerAdviceRequest(BaseModel):
