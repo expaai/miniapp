@@ -26,19 +26,22 @@ RUN adduser --system --uid 1001 nextjs
 # Копируем собранное статическое приложение
 COPY --from=builder /app/dist ./dist
 
+# Устанавливаем nginx (нужны root права)
+RUN apk add --no-cache nginx
+COPY nginx/frontend.conf /etc/nginx/nginx.conf
+RUN mkdir -p /run/nginx
+
 # Меняем владельца файлов
 RUN chown -R nextjs:nodejs /app
+RUN chown -R nextjs:nodejs /var/lib/nginx
+RUN chown -R nextjs:nodejs /var/log/nginx
+RUN chown -R nextjs:nodejs /run/nginx
 
 USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-# Используем nginx для статических файлов
-RUN apk add --no-cache nginx
-COPY nginx/frontend.conf /etc/nginx/nginx.conf
-RUN mkdir -p /run/nginx
-EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]
