@@ -17,6 +17,16 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
+          # Start Docker service if not running
+          systemctl start docker
+          systemctl enable docker
+          
+          # Add current user to docker group
+          usermod -aG docker $USER
+          
+          # Wait for Docker to start
+          sleep 5
+          
           # Create directory if it doesn't exist
           mkdir -p /root/career-miniapp
           cd /root/career-miniapp
