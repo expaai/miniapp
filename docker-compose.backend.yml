@@ -7,8 +7,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
+    # volumes:
+      #   - ./backend:/app
     environment:
       - ENVIRONMENT=development
       - DATABASE_URL=postgresql://career_user:career_pass@postgres:5432/career_db

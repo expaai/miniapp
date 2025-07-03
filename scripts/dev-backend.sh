@@ -4,14 +4,18 @@
 
 echo "🚀 Запускаю бэкенд в режиме разработки..."
 
-# Проверяем наличие .env файла
-if [ ! -f "backend/.env" ]; then
-    echo "⚠️  Файл backend/.env не найден. Создайте его на основе backend/.env.example"
-    exit 1
+# Проверяем наличие OPENAI_API_KEY
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "⚠️  Переменная OPENAI_API_KEY не установлена."
+    echo "Установите её: export OPENAI_API_KEY=your_key_here"
+    echo "Или создайте .env.local файл в корне проекта с OPENAI_API_KEY=your_key"
+    
+    # Пытаемся загрузить из .env.local если есть
+    if [ -f ".env.local" ]; then
+        echo "📋 Загружаю переменные из .env.local..."
+        export $(grep -v '^#' .env.local | xargs)
+    fi
 fi
-
-# Экспортируем переменные из .env
-export $(grep -v '^#' backend/.env | xargs)
 
 # Запускаем бэкенд с PostgreSQL
 docker-compose -f docker-compose.backend.yml up --build

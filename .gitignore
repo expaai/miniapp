@@ -31,6 +31,7 @@ backend/.env.local
 backend/.env.production
 backend/.env.development
 backend/.env.test
+backend/.env.old
 backend/test.db
 backend/uploads/
 backend/logs/
