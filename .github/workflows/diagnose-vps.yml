@@ -1,44 +1,194 @@
 name: Diagnose VPS State
 
 on:
-  workflow_dispatch:  # Ручной запуск
+  workflow_dispatch:
 
 jobs:
   diagnose:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Check VPS Connection and State
+    - name: Full VPS Diagnostic and Fix
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
-          echo "🔍 Диагностика VPS сервера"
-          echo "Пользователь: $(whoami)"
-          echo "Домашняя директория: $HOME"
-          echo "Текущая директория: $(pwd)"
+          echo "=== ПОЛНАЯ ДИАГНОСТИКА VPS ==="
+          echo "Date: $(date)"
+          echo "User: $(whoami)"
+          echo "Home: $HOME"
+          echo ""
           
-          echo "\n📁 Проверка структуры директорий:"
-          echo "Содержимое /opt:"
-          sudo ls -la /opt/ || echo "Нет доступа к /opt"
-          
-          echo "\nСодержимое /var/www:"
-          sudo ls -la /var/www/ || echo "Нет доступа к /var/www"
-          
-          echo "\n🔧 Проверка systemd сервисов:"
-          sudo systemctl list-units --type=service | grep career || echo "Сервис career не найден"
-          
-          echo "\n🐍 Проверка Python:"
-          python3 --version
-          which python3
-          
-          echo "\n🌐 Проверка сети:"
-          curl -I http://localhost:8000/health || echo "API недоступен"
-          
-          echo "\n📊 Системная информация:"
+          echo "=== SYSTEM INFO ==="
+          uname -a
+          echo "Python version: $(python3 --version)"
+          echo "Disk space:"
           df -h
+          echo "Memory:"
           free -h
+          echo ""
           
-          echo "\n✅ Диагностика завершена"
+          echo "=== DIRECTORY STRUCTURE ==="
+          echo "Contents of /opt:"
+          sudo ls -la /opt/ || echo "Cannot access /opt"
+          echo ""
+          echo "Contents of /opt/career-backend:"
+          sudo ls -la /opt/career-backend/ || echo "Directory does not exist"
+          echo ""
+          echo "Contents of /var/www:"
+          sudo ls -la /var/www/ || echo "Cannot access /var/www"
+          echo ""
+          
+          echo "=== СОЗДАНИЕ ДИРЕКТОРИЙ ЕСЛИ НЕ СУЩЕСТВУЮТ ==="
+          if [ ! -d "/opt/career-backend" ]; then
+            echo "Создаю /opt/career-backend"
+            sudo mkdir -p /opt/career-backend
+            sudo chown -R www-data:www-data /opt/career-backend
+            echo "✅ Директория создана"
+          else
+            echo "✅ Директория /opt/career-backend существует"
+          fi
+          
+          echo ""
+          echo "=== SYSTEMD SERVICES ==="
+          echo "Career-related services:"
+          sudo systemctl list-units --all | grep -i career || echo "No career services found"
+          echo ""
+          echo "Career-backend service status:"
+          sudo systemctl status career-backend || echo "Service not found"
+          echo ""
+          echo "Career-backend service file:"
+          sudo cat /etc/systemd/system/career-backend.service || echo "Service file not found"
+          echo ""
+          
+          echo "=== СОЗДАНИЕ SYSTEMD СЕРВИСА ЕСЛИ НЕ СУЩЕСТВУЕТ ==="
+          if [ ! -f "/etc/systemd/system/career-backend.service" ]; then
+            echo "Создаю systemd сервис"
+            sudo tee /etc/systemd/system/career-backend.service > /dev/null <<EOF
+[Unit]
+Description=Career Backend API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/career-backend
+Environment=PATH=/opt/career-backend/venv/bin
+ExecStart=/opt/career-backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable career-backend
+            echo "✅ Systemd сервис создан"
+          else
+            echo "✅ Systemd сервис существует"
+          fi
+          
+          echo ""
+          echo "=== NETWORK & PROCESSES ==="
+          echo "Processes on port 8000:"
+          sudo lsof -i :8000 || echo "No processes on port 8000"
+          echo ""
+          echo "Active network connections:"
+          sudo netstat -tlnp | grep :8000 || echo "Port 8000 not listening"
+          echo ""
+          
+          echo "=== PYTHON ENVIRONMENT ==="
+          if [ -d "/opt/career-backend/venv" ]; then
+            echo "✅ Virtual environment exists"
+            echo "Python in venv: $(/opt/career-backend/venv/bin/python --version)"
+            echo "Pip packages:"
+            /opt/career-backend/venv/bin/pip list | grep -E "(fastapi|uvicorn|httpx)" || echo "Key packages not found"
+          else
+            echo "❌ Virtual environment not found"
+            if [ -d "/opt/career-backend" ]; then
+              echo "Создаю виртуальное окружение"
+              cd /opt/career-backend
+              sudo python3 -m venv venv
+              sudo chown -R www-data:www-data venv
+              echo "✅ Virtual environment created"
+            fi
+          fi
+          echo ""
+          
+          echo "=== УСТАНОВКА ЗАВИСИМОСТЕЙ ==="
+          if [ -f "/opt/career-backend/requirements.txt" ] && [ -d "/opt/career-backend/venv" ]; then
+            echo "Устанавливаю зависимости"
+            cd /opt/career-backend
+            sudo venv/bin/pip install --upgrade pip
+            sudo venv/bin/pip install --no-cache-dir --force-reinstall -r requirements.txt
+            echo "✅ Зависимости установлены"
+            echo "Проверка ключевых пакетов:"
+            sudo venv/bin/pip list | grep -E "(fastapi|uvicorn|httpx)"
+          else
+            echo "❌ requirements.txt или venv не найдены"
+          fi
+          echo ""
+          
+          echo "=== ПРОВЕРКА MAIN.PY ==="
+          if [ -f "/opt/career-backend/main.py" ]; then
+            echo "✅ main.py существует"
+            echo "Первые 20 строк main.py:"
+            sudo head -20 /opt/career-backend/main.py
+          else
+            echo "❌ main.py не найден"
+          fi
+          echo ""
+          
+          echo "=== ЗАПУСК СЕРВИСА ==="
+          sudo systemctl stop career-backend || echo "Сервис уже остановлен"
+          sleep 2
+          sudo systemctl start career-backend
+          sleep 5
+          
+          echo "Статус сервиса:"
+          sudo systemctl status career-backend
+          echo ""
+          
+          echo "=== API HEALTH CHECK ==="
+          echo "Testing localhost:8000/health:"
+          for i in {1..5}; do
+            echo "Попытка $i:"
+            if curl -f http://localhost:8000/health 2>/dev/null; then
+              echo "✅ Health check успешен"
+              break
+            else
+              echo "❌ Health check неудачен, жду 3 секунды..."
+              sleep 3
+            fi
+          done
+          echo ""
+          
+          echo "=== RECENT LOGS ==="
+          echo "Recent career-backend logs:"
+          sudo journalctl -u career-backend --no-pager -n 30 || echo "No logs available"
+          echo ""
+          
+          echo "=== NGINX STATUS ==="
+          echo "Nginx status:"
+          sudo systemctl status nginx || echo "Nginx not found"
+          echo ""
+          echo "Nginx sites:"
+          sudo ls -la /etc/nginx/sites-enabled/ || echo "Cannot access nginx sites"
+          echo ""
+          
+          echo "=== ФИНАЛЬНАЯ ПРОВЕРКА ==="
+          echo "Финальный статус career-backend:"
+          if sudo systemctl is-active --quiet career-backend; then
+            echo "✅ Сервис активен"
+          else
+            echo "❌ Сервис неактивен"
+          fi
+          
+          echo "Финальная проверка API:"
+          curl -s http://localhost:8000/health || echo "API недоступен"
+          echo ""
+          
+          echo "=== ДИАГНОСТИКА ЗАВЕРШЕНА ==="

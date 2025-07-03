@@ -1,110 +1,198 @@
 name: Deploy Full Stack to VPS
 
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:  # Временно отключаем автозапуск, только ручной
+  # push:
+  #   branches: [ main ]
 
 jobs:
   deploy-frontend:
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-
+      uses: actions/checkout@v4
+      
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-
+        
     - name: Install dependencies
       run: npm ci
-
-    - name: Build application
+      
+    - name: Build
       run: npm run build
-
+      
+    - name: Validate build output
+      run: |
+        echo "🔍 Проверка сборки фронтенда..."
+        if [ ! -d "dist" ]; then
+          echo "❌ Ошибка: директория dist не найдена"
+          exit 1
+        fi
+        if [ ! -f "dist/index.html" ]; then
+          echo "❌ Ошибка: dist/index.html не найден"
+          exit 1
+        fi
+        echo "✅ Сборка фронтенда валидна"
+      
     - name: Deploy Frontend to VPS
-      uses: appleboy/ssh-action@v0.1.5
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
+        script_stop: true  # Остановить выполнение при ошибке
         script: |
-          # Create backup of current frontend
-          sudo cp -r /var/www/expa-ai.ru /var/www/expa-ai.ru.backup.$(date +%Y%m%d_%H%M%S)
+          echo "🚀 Начинаем обновление фронтенда..."
           
-          # Clear current frontend directory
+          # Проверка существования директории
+          if [ ! -d "/var/www/expa-ai.ru" ]; then
+            echo "Создаю директорию /var/www/expa-ai.ru"
+            sudo mkdir -p /var/www/expa-ai.ru
+          fi
+          
+          # Создаем backup текущей версии
+          if [ -d "/var/www/expa-ai.ru" ] && [ "$(ls -A /var/www/expa-ai.ru)" ]; then
+            BACKUP_DIR="/var/www/expa-ai.ru.backup.$(date +%Y%m%d_%H%M%S)"
+            echo "Создаю бэкап в $BACKUP_DIR"
+            sudo cp -r /var/www/expa-ai.ru $BACKUP_DIR
+            echo "✅ Backup создан"
+          fi
+          
+          # Очищаем директорию
+          echo "Очищаю директорию..."
           sudo rm -rf /var/www/expa-ai.ru/*
           
-          # Clone repository
+          # Переходим во временную директорию
           cd /tmp
+          
+          # Клонируем свежую версию репозитория
+          echo "Клонирую репозиторий..."
           rm -rf career-miniapp
           git clone https://github.com/${{ github.repository }}.git career-miniapp
+          
+          # Переходим в директорию проекта
           cd career-miniapp
           
-          # Install dependencies and build
+          # Устанавливаем зависимости и собираем проект
+          echo "Устанавливаю зависимости и собираю проект..."
           npm ci
           npm run build
           
-          # Copy built files to web directory
+          # Проверяем наличие dist директории
+          if [ ! -d "dist" ]; then
+            echo "❌ Ошибка: директория dist не найдена после сборки"
+            exit 1
+          fi
+          
+          # Копируем собранные файлы
+          echo "Копирую собранные файлы..."
           sudo cp -r dist/* /var/www/expa-ai.ru/
           
-          # Set proper permissions
+          # Устанавливаем правильные права доступа
+          echo "Устанавливаю права доступа..."
           sudo chown -R www-data:www-data /var/www/expa-ai.ru
           sudo chmod -R 755 /var/www/expa-ai.ru
           
-          # Reload nginx
+          # Проверяем наличие index.html
+          if [ ! -f "/var/www/expa-ai.ru/index.html" ]; then
+            echo "❌ Ошибка: index.html не найден после копирования"
+            exit 1
+          fi
+          
+          # Перезагружаем Nginx
+          echo "Перезагружаю Nginx..."
           sudo systemctl reload nginx
           
-          # Cleanup
-          cd /
+          # Очищаем временные файлы
           rm -rf /tmp/career-miniapp
-
+          
+          echo "🎉 Деплой фронтенда завершен успешно!"
+          echo "Сайт доступен по адресу: https://expa-ai.ru"
+          
   deploy-backend:
-    runs-on: ubuntu-latest
     needs: deploy-frontend
+    runs-on: ubuntu-latest
+    
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Validate backend code
+      run: |
+        echo "🔍 Проверка структуры бэкенда..."
+        if [ ! -f "backend/main.py" ]; then
+          echo "❌ Ошибка: backend/main.py не найден"
+          exit 1
+        fi
+        if [ ! -f "backend/requirements.txt" ]; then
+          echo "❌ Ошибка: backend/requirements.txt не найден"
+          exit 1
+        fi
+        echo "✅ Структура бэкенда валидна"
+      
     - name: Deploy Backend to VPS
-      uses: appleboy/ssh-action@v0.1.5
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
+        script_stop: true  # Остановить выполнение при ошибке
         script: |
-          # Create backend directory if it doesn't exist
-          sudo mkdir -p /opt/career-backend
+          echo "🚀 Начинаем обновление бэкенда..."
           
-          # Stop backend service if it exists
-          sudo systemctl stop career-backend || true
-          
-          # Create backup if directory exists and has content
-          if [ -d "/opt/career-backend" ] && [ "$(ls -A /opt/career-backend)" ]; then
-            sudo cp -r /opt/career-backend /opt/career-backend.backup.$(date +%Y%m%d_%H%M%S)
+          # Проверка существования директории
+          if [ ! -d "/opt/career-backend" ]; then
+            echo "Создаю директорию /opt/career-backend"
+            sudo mkdir -p /opt/career-backend
+            sudo chown -R www-data:www-data /opt/career-backend
           fi
           
-          # Clone repository
+          # Останавливаем сервис
+          echo "Останавливаю сервис..."
+          sudo systemctl stop career-backend || echo "Сервис уже остановлен"
+          
+          # Создаем backup текущей версии
+          if [ -d "/opt/career-backend" ] && [ "$(ls -A /opt/career-backend)" ]; then
+            BACKUP_DIR="/opt/career-backend.backup.$(date +%Y%m%d_%H%M%S)"
+            echo "Создаю бэкап в $BACKUP_DIR"
+            sudo cp -r /opt/career-backend $BACKUP_DIR
+            echo "✅ Backup создан"
+          fi
+          
+          # Переходим во временную директорию
           cd /tmp
+          
+          # Клонируем свежую версию репозитория
+          echo "Клонирую репозиторий..."
           rm -rf career-miniapp
           git clone https://github.com/${{ github.repository }}.git career-miniapp
           
-          # Copy backend files
+          # Копируем новый backend
+          echo "Копирую файлы бэкенда..."
           sudo cp -r career-miniapp/backend/* /opt/career-backend/
           
-          # Create virtual environment if it doesn't exist
+          # Переходим в директорию бэкенда
           cd /opt/career-backend
-          if [ ! -d "venv" ]; then
-            sudo python3 -m venv venv
+          
+          # Проверка наличия main.py
+          if [ ! -f "main.py" ]; then
+            echo "❌ Ошибка: main.py не найден после копирования"
+            exit 1
           fi
           
-          # Activate virtual environment and update dependencies
-          sudo venv/bin/pip install --upgrade pip
-          sudo venv/bin/pip install --force-reinstall -r requirements.txt
+          # Проверка наличия requirements.txt
+          if [ ! -f "requirements.txt" ]; then
+            echo "❌ Ошибка: requirements.txt не найден после копирования"
+            exit 1
+          fi
           
-          # Verify httpx version
-          sudo venv/bin/python -c "import httpx; print(f'httpx version: {httpx.__version__}')"
-          
-          # Create systemd service if it doesn't exist
+          # Создаем systemd сервис если его нет
           if [ ! -f "/etc/systemd/system/career-backend.service" ]; then
+            echo "Создаю systemd сервис"
             sudo tee /etc/systemd/system/career-backend.service > /dev/null <<EOF
 [Unit]
 Description=Career Backend API
@@ -113,6 +201,7 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
+Group=www-data
 WorkingDirectory=/opt/career-backend
 Environment=PATH=/opt/career-backend/venv/bin
 ExecStart=/opt/career-backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
@@ -124,24 +213,144 @@ WantedBy=multi-user.target
 EOF
             sudo systemctl daemon-reload
             sudo systemctl enable career-backend
+            echo "✅ Systemd сервис создан"
           fi
           
-          # Set proper permissions
+          # Создаем виртуальное окружение если его нет
+          if [ ! -d "venv" ]; then
+            echo "Создаю виртуальное окружение..."
+            sudo python3 -m venv venv
+          fi
+          
+          # Обновляем pip и устанавливаем зависимости
+          echo "Устанавливаю зависимости..."
+          sudo venv/bin/pip install --upgrade pip
+          sudo venv/bin/pip install --no-cache-dir --force-reinstall -r requirements.txt
+          echo "✅ Зависимости обновлены"
+          
+          # Проверяем версию httpx
+          echo "Проверяю версию httpx..."
+          HTTPX_VERSION=$(sudo venv/bin/python -c "import httpx; print(httpx.__version__)")
+          echo "httpx version: $HTTPX_VERSION"
+          
+          # Устанавливаем правильные права доступа
+          echo "Устанавливаю права доступа..."
           sudo chown -R www-data:www-data /opt/career-backend
           
-          # Start backend service
+          # Запускаем сервис
+          echo "Запускаю сервис..."
           sudo systemctl start career-backend
+          echo "✅ Сервис запущен"
           
-          # Wait for service to start
+          # Ждем запуска
+          echo "Жду запуск сервиса..."
           sleep 10
           
-          # Check service status
-          sudo systemctl status career-backend
+          # Проверяем статус сервиса
+          if sudo systemctl is-active --quiet career-backend; then
+            echo "✅ Сервис работает"
+          else
+            echo "❌ Сервис не запустился"
+            echo "Статус сервиса:"
+            sudo systemctl status career-backend
+            echo "Логи сервиса:"
+            sudo journalctl -u career-backend --no-pager -n 50
+            exit 1
+          fi
           
-          # Health check
-          curl -f http://localhost:8000/health || exit 1
+          # Проверяем health endpoint
+          echo "Проверяю health endpoint..."
+          sleep 5
+          for i in {1..5}; do
+            echo "Попытка $i:"
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ Health check прошел"
+              break
+            else
+              if [ $i -eq 5 ]; then
+                echo "❌ Health check не прошел после 5 попыток"
+                echo "Детали запроса:"
+                curl -v http://localhost:8000/health || true
+                echo "Логи сервиса:"
+                sudo journalctl -u career-backend --no-pager -n 50
+                exit 1
+              else
+                echo "❌ Health check не прошел, жду 3 секунды..."
+                sleep 3
+              fi
+            fi
+          done
           
-          # Cleanup
+          # Очищаем временные файлы
           rm -rf /tmp/career-miniapp
           
-          echo "Backend deployment completed successfully"
+          echo "🎉 Деплой бэкенда завершен успешно!"
+          echo "API доступен по адресу: http://localhost:8000"
+          echo "Документация API: http://localhost:8000/docs"
+          
+  verify-deployment:
+    needs: [deploy-frontend, deploy-backend]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Verify Full Deployment
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          echo "🔍 Проверка полного деплоя..."
+          
+          # Проверяем статус сервиса
+          if sudo systemctl is-active --quiet career-backend; then
+            echo "✅ Backend сервис активен"
+          else
+            echo "❌ Backend сервис неактивен"
+            exit 1
+          fi
+          
+          # Проверяем health endpoint
+          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ Backend API доступен локально"
+          else
+            echo "❌ Backend API недоступен локально"
+            exit 1
+          fi
+          
+          # Проверяем внешний доступ к API
+          if curl -f https://api.expa-ai.ru/health > /dev/null 2>&1; then
+            echo "✅ Backend API доступен внешне"
+          else
+            echo "❌ Backend API недоступен внешне"
+            echo "Проверьте настройки Nginx"
+          fi
+          
+          # Проверяем фронтенд
+          if [ -f "/var/www/expa-ai.ru/index.html" ]; then
+            echo "✅ Frontend файлы существуют"
+          else
+            echo "❌ Frontend файлы не найдены"
+            exit 1
+          fi
+          
+          # Проверяем Nginx
+          if sudo systemctl is-active --quiet nginx; then
+            echo "✅ Nginx активен"
+          else
+            echo "❌ Nginx неактивен"
+            exit 1
+          fi
+          
+          # Проверяем внешний доступ к фронтенду
+          if curl -f -I https://expa-ai.ru > /dev/null 2>&1; then
+            echo "✅ Frontend доступен внешне"
+          else
+            echo "❌ Frontend недоступен внешне"
+            echo "Проверьте настройки Nginx"
+          fi
+          
+          echo "✅ Полный деплой успешно проверен"
+          echo "Frontend: https://expa-ai.ru"
+          echo "Backend API: https://api.expa-ai.ru"
+          echo "API Docs: https://api.expa-ai.ru/docs"
