@@ -1,0 +1,103 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '*.md'
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          echo "🚀 Начинаем деплой..."
+          
+          # Переходим в директорию проекта
+          cd /opt/career-miniapp || {
+            echo "Создаю директорию проекта"
+            sudo mkdir -p /opt/career-miniapp
+            cd /opt/career-miniapp
+          }
+          
+          # Останавливаем текущие контейнеры
+          echo "Останавливаю текущие контейнеры..."
+          sudo docker-compose -f docker-compose.prod.yml down || true
+          
+          # Обновляем код
+          echo "Обновляю код..."
+          if [ -d ".git" ]; then
+            sudo git fetch origin
+            sudo git reset --hard origin/main
+          else
+            cd ..
+            sudo rm -rf career-miniapp
+            sudo git clone https://github.com/${{ github.repository }}.git career-miniapp
+            cd career-miniapp
+          fi
+          
+          # Создаем .env.prod файл с секретами
+          echo "Создаю .env.prod файл с секретами..."
+          sudo tee .env.prod > /dev/null <<EOF
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          DOMAIN=expa-ai.ru
+          API_DOMAIN=api.expa-ai.ru
+          VITE_API_URL=https://api.expa-ai.ru
+          NEXT_PUBLIC_API_URL=https://api.expa-ai.ru
+          EOF
+          
+          # Собираем и запускаем контейнеры
+          echo "Собираю и запускаю контейнеры..."
+          # Экспортируем переменные из .env.prod
+          export $(grep -v '^#' .env.prod | xargs)
+          sudo docker-compose -f docker-compose.prod.yml build --no-cache
+          sudo docker-compose -f docker-compose.prod.yml up -d
+          
+          # Ждем запуска сервисов
+          echo "Жду запуск сервисов..."
+          sleep 30
+          
+          # Проверяем статус
+          echo "Проверяю статус сервисов..."
+          sudo docker-compose -f docker-compose.prod.yml ps
+          
+          # Проверяем health endpoint
+          echo "Проверяю API health..."
+          for i in {1..5}; do
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ API работает"
+              break
+            else
+              if [ $i -eq 5 ]; then
+                echo "❌ API не отвечает после 5 попыток"
+                sudo docker-compose -f docker-compose.prod.yml logs backend
+                exit 1
+              else
+                echo "Попытка $i: API не отвечает, жду..."
+                sleep 10
+              fi
+            fi
+          done
+          
+          # Очищаем старые образы
+          echo "Очищаю старые Docker образы..."
+          sudo docker system prune -f
+          
+          echo "🎉 Деплой завершен успешно!"
+          echo "Frontend: https://expa-ai.ru"
+          echo "Backend API: https://api.expa-ai.ru"

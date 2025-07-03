@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://career_user:career_pass@postgres:5432/career_db
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ALLOWED_ORIGINS=http://localhost:3000,https://expa-ai.ru
+    depends_on:
+      - postgres
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - career-network
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=career_db
+      - POSTGRES_USER=career_user
+      - POSTGRES_PASSWORD=career_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - career-network
+
+volumes:
+  postgres_data:
+
+networks:
+  career-network:
+    driver: bridge

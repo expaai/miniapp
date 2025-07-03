@@ -23,6 +23,7 @@ yarn-error.log*
 .env.production
 .env.development
 .env.test
+.env.prod
 
 # backend specific
 backend/.env
@@ -32,6 +33,23 @@ backend/.env.development
 backend/.env.test
 backend/test.db
 backend/uploads/
+backend/logs/
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# SSL certificates
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
+# PostgreSQL data
+postgres_data/
+
+# Logs
+logs/
+*.log
 
 # vercel
 .vercel
