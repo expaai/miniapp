@@ -44,8 +44,8 @@ jobs:
           # Remove all unused Docker resources
           docker system prune -af || true
           
-          # Create .env.prod file with secrets
-          cat > .env.prod << EOF
+          # Create .env file with secrets (not .env.prod)
+          cat > .env << EOF
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           DOMAIN=expa-ai.ru
