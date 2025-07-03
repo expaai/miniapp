@@ -49,11 +49,11 @@ jobs:
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           DOMAIN=expa-ai.ru
-          POSTGRES_DB=career_miniapp
-          POSTGRES_USER=postgres
+          POSTGRES_DB=career_db
+          POSTGRES_USER=career_user
           POSTGRES_HOST=postgres
           POSTGRES_PORT=5432
-          DATABASE_URL=postgresql://postgres:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/career_miniapp
+          DATABASE_URL=postgresql://career_user:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/career_db
           ENVIRONMENT=production
           NEXT_PUBLIC_API_URL=https://api.expa-ai.ru
           EOF

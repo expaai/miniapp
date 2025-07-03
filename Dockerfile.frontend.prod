@@ -36,6 +36,9 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Используем простой HTTP сервер для статических файлов
-RUN npm install -g serve
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Используем nginx для статических файлов
+RUN apk add --no-cache nginx
+COPY nginx/frontend.conf /etc/nginx/nginx.conf
+RUN mkdir -p /run/nginx
+EXPOSE 3000
+CMD ["nginx", "-g", "daemon off;"]
