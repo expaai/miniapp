@@ -1,0 +1,44 @@
+name: Diagnose VPS State
+
+on:
+  workflow_dispatch:  # Ручной запуск
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check VPS Connection and State
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          echo "🔍 Диагностика VPS сервера"
+          echo "Пользователь: $(whoami)"
+          echo "Домашняя директория: $HOME"
+          echo "Текущая директория: $(pwd)"
+          
+          echo "\n📁 Проверка структуры директорий:"
+          echo "Содержимое /opt:"
+          sudo ls -la /opt/ || echo "Нет доступа к /opt"
+          
+          echo "\nСодержимое /var/www:"
+          sudo ls -la /var/www/ || echo "Нет доступа к /var/www"
+          
+          echo "\n🔧 Проверка systemd сервисов:"
+          sudo systemctl list-units --type=service | grep career || echo "Сервис career не найден"
+          
+          echo "\n🐍 Проверка Python:"
+          python3 --version
+          which python3
+          
+          echo "\n🌐 Проверка сети:"
+          curl -I http://localhost:8000/health || echo "API недоступен"
+          
+          echo "\n📊 Системная информация:"
+          df -h
+          free -h
+          
+          echo "\n✅ Диагностика завершена"

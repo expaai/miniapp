@@ -1,11 +1,12 @@
 name: Deploy Backend to VPS
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:  # Временно отключаем автозапуск, только ручной
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'backend/**'
+  #     - '.github/workflows/deploy-backend.yml'
 
 jobs:
   deploy-backend:
