@@ -22,59 +22,57 @@ jobs:
           echo "🚀 Начинаем обновление бэкенда..."
           
           # Останавливаем сервис
-          systemctl stop career-backend || echo "Сервис уже остановлен"
+          sudo systemctl stop career-backend || echo "Сервис уже остановлен"
           
           # Создаем backup текущей версии
-          if [ -d "/home/${{ secrets.VPS_USERNAME }}/career-miniapp/backend" ]; then
-            cp -r /home/${{ secrets.VPS_USERNAME }}/career-miniapp/backend /home/${{ secrets.VPS_USERNAME }}/career-miniapp/backend.backup.$(date +%Y%m%d_%H%M%S)
+          if [ -d "/opt/career-backend" ] && [ "$(ls -A /opt/career-backend)" ]; then
+            sudo cp -r /opt/career-backend /opt/career-backend.backup.$(date +%Y%m%d_%H%M%S)
             echo "✅ Backup создан"
           fi
           
-          # Переходим в домашнюю директорию
-          cd /home/${{ secrets.VPS_USERNAME }}
+          # Переходим во временную директорию
+          cd /tmp
           
           # Клонируем свежую версию репозитория
-          rm -rf career-miniapp-temp
-          git clone https://github.com/${{ github.repository }}.git career-miniapp-temp
+          rm -rf career-miniapp
+          git clone https://github.com/${{ github.repository }}.git career-miniapp
           
           # Копируем новый backend
-          cp -r career-miniapp-temp/backend/* /home/${{ secrets.VPS_USERNAME }}/career-miniapp/backend/
+          sudo cp -r career-miniapp/backend/* /opt/career-backend/
           
           # Переходим в директорию бэкенда
-          cd /home/${{ secrets.VPS_USERNAME }}/career-miniapp/backend
+          cd /opt/career-backend
           
           # Создаем виртуальное окружение если его нет
           if [ ! -d "venv" ]; then
-            python3 -m venv venv
+            sudo python3 -m venv venv
           fi
           
-          # Активируем виртуальное окружение
-          source venv/bin/activate
-          
-          # Обновляем pip
-          pip install --upgrade pip
-          
-          # Устанавливаем зависимости с принудительной переустановкой
-          pip install --no-cache-dir --force-reinstall -r requirements.txt
+          # Обновляем pip и устанавливаем зависимости
+          sudo venv/bin/pip install --upgrade pip
+          sudo venv/bin/pip install --no-cache-dir --force-reinstall -r requirements.txt
           echo "✅ Зависимости обновлены"
           
           # Проверяем версию httpx
-          pip show httpx | grep Version
+          sudo venv/bin/python -c "import httpx; print(f'httpx version: {httpx.__version__}')"
+          
+          # Устанавливаем правильные права доступа
+          sudo chown -R www-data:www-data /opt/career-backend
           
           # Запускаем сервис
-          systemctl start career-backend
+          sudo systemctl start career-backend
           echo "✅ Сервис запущен"
           
           # Ждем запуска
           sleep 10
           
           # Проверяем статус сервиса
-          if systemctl is-active --quiet career-backend; then
+          if sudo systemctl is-active --quiet career-backend; then
             echo "✅ Сервис работает"
           else
             echo "❌ Сервис не запустился"
-            systemctl status career-backend
-            journalctl -u career-backend --no-pager -n 20
+            sudo systemctl status career-backend
+            sudo journalctl -u career-backend --no-pager -n 20
             exit 1
           fi
           
@@ -89,6 +87,6 @@ jobs:
           fi
           
           # Очищаем временные файлы
-          rm -rf /home/${{ secrets.VPS_USERNAME }}/career-miniapp-temp
+          rm -rf /tmp/career-miniapp
           
           echo "🎉 Деплой бэкенда завершен успешно!"

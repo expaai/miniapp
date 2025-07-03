@@ -1,0 +1,43 @@
+name: Test Backend Deploy
+
+on:
+  workflow_dispatch:  # Ручной запуск для тестирования
+
+jobs:
+  test-deploy-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Test Deploy Backend to VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          echo "🧪 Тестовый деплой бэкенда..."
+          
+          # Проверяем текущее состояние
+          echo "📋 Текущее состояние сервиса:"
+          sudo systemctl status career-backend || echo "Сервис не найден"
+          
+          echo "📁 Содержимое /opt/career-backend:"
+          ls -la /opt/career-backend/ || echo "Директория не существует"
+          
+          echo "🔍 Проверка виртуального окружения:"
+          if [ -f "/opt/career-backend/venv/bin/python" ]; then
+            sudo /opt/career-backend/venv/bin/python --version
+            sudo /opt/career-backend/venv/bin/pip list | grep httpx || echo "httpx не установлен"
+          else
+            echo "Виртуальное окружение не найдено"
+          fi
+          
+          echo "🌐 Проверка доступности API:"
+          curl -v http://localhost:8000/health || echo "API недоступен"
+          
+          echo "📊 Системная информация:"
+          echo "Python версия: $(python3 --version)"
+          echo "Свободное место: $(df -h /opt | tail -1)"
+          echo "Процессы на порту 8000: $(sudo lsof -i :8000 || echo 'Порт свободен')"
+          
+          echo "✅ Тестовая проверка завершена"
