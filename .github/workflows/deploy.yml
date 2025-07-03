@@ -13,12 +13,20 @@ jobs:
     - name: Deploy to VPS
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.SSH_HOST }}
-        username: ${{ secrets.SSH_USERNAME }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
         script: |
-          cd /root/miniapp
-          git pull origin main
+          # Create directory if it doesn't exist
+          mkdir -p /root/career-miniapp
+          cd /root/career-miniapp
+          
+          # Clone repository if it doesn't exist, otherwise pull
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/expaai/miniapp.git .
+          else
+            git pull origin main
+          fi
           
           # Stop existing containers
           docker-compose -f docker-compose.prod.yml down || true
@@ -27,7 +35,7 @@ jobs:
           cat > .env.prod << EOF
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          DOMAIN=raputitechit.beget.app
+          DOMAIN=expa-ai.ru
           POSTGRES_DB=career_miniapp
           POSTGRES_USER=postgres
           POSTGRES_HOST=postgres
