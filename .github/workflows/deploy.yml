@@ -38,8 +38,11 @@ jobs:
             git pull origin main
           fi
           
-          # Stop existing containers
-          docker-compose -f docker-compose.prod.yml down || true
+          # Stop existing containers and remove volumes
+          docker-compose -f docker-compose.prod.yml down -v || true
+          
+          # Remove all unused Docker resources
+          docker system prune -af || true
           
           # Create .env.prod file with secrets
           cat > .env.prod << EOF
@@ -55,8 +58,9 @@ jobs:
           NEXT_PUBLIC_API_URL=https://api.expa-ai.ru
           EOF
           
-          # Build and start containers
-          docker-compose -f docker-compose.prod.yml up -d --build
+          # Build and start containers with no cache
+          docker-compose -f docker-compose.prod.yml build --no-cache
+          docker-compose -f docker-compose.prod.yml up -d
           
           # Wait for services to start
           sleep 30
